@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Transcript - Side Panel</title>
+    <style>
+        body {
+            font-family: 'Google Sans', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 400px;
+        }
+        h1 {
+            color: #1a73e8;
+            font-size: 24px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .description {
+            color: #5f6368;
+            margin-bottom: 30px;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+        .button {
+            width: 100%;
+            padding: 12px 20px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .button:hover {
+            background: #1557b0;
+            transform: translateY(-1px);
+        }
+        .button:disabled {
+            background: #dadce0;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .button.success {
+            background: #34a853;
+        }
+        .button.success:hover {
+            background: #2d8f47;
+        }
+        .button.danger {
+            background: #ea4335;
+        }
+        .button.danger:hover {
+            background: #d33b2c;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+        }
+        .status.success {
+            background: #e8f5e8;
+            color: #137333;
+            border: 1px solid #c8e6c9;
+        }
+        .status.error {
+            background: #fce8e6;
+            color: #d93025;
+            border: 1px solid #ffcdd2;
+        }
+        .status.info {
+            background: #e8f0fe;
+            color: #1a73e8;
+            border: 1px solid #bbdefb;
+        }
+        .features {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .features h3 {
+            margin: 0 0 15px 0;
+            color: #1a73e8;
+            font-size: 16px;
+        }
+        .features ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #5f6368;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .features li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Live Transcript</h1>
+        <div class="description">
+            Start live transcription for all meeting participants. Each person's speech will be transcribed and displayed with their name in real-time.
+        </div>
+        
+        <div class="features">
+            <h3>✨ Features</h3>
+            <ul>
+                <li>Real-time speech-to-text conversion</li>
+                <li>Speaker identification and labeling</li>
+                <li>Visual speaking indicators</li>
+                <li>Full-screen transcript view</li>
+                <li>Professional Deepgram integration</li>
+            </ul>
+        </div>
+        
+        <button id="start-activity" class="button">
+            🚀 Launch Transcript in Main Stage
+        </button>
+        
+        <button id="start-transcript" class="button success">
+            ▶️ Start Live Transcript
+        </button>
+        
+        <button id="stop-transcript" class="button danger" disabled>
+            ⏹️ Stop Transcript
+        </button>
+        
+        <div id="status" class="status"></div>
+    </div>
+    
+    <script src="./dist/bundle.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Library name (`transcriptAddon`) is defined in the webpack config.
+            // The function (`setUpAddon`) is defined in main.js.
+            transcriptAddon.setUpAddon();
+        });
+    </script>
+</body>
+</html>

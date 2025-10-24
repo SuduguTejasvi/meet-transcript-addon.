@@ -1,0 +1,18 @@
+{
+  "addOns": {
+    "common": {
+      "name": "Live Transcript",
+      "logoUrl": "https://your-domain.com/logo.png"
+    },
+    "meet": {
+      "web": {
+        "sidePanelUrl": "https://your-domain.com/sidepanel.html",
+        "supportsScreenSharing": true,
+        "addOnOrigins": ["https://your-domain.com"],
+        "logoUrl": "https://your-domain.com/meet-logo.png",
+        "darkModeLogoUrl": "https://your-domain.com/meet-logo-dark.png"
+      }
+    }
+  }
+}
+
