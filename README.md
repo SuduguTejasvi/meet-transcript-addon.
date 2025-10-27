@@ -1,225 +1,185 @@
 # Google Meet Live Transcript Add-on
 
-A Google Meet add-on that provides real-time transcription for all meeting participants using Deepgram's speech-to-text API. Each participant's speech is transcribed and displayed with their name in real-time.
+A real-time speech-to-text add-on for Google Meet that captures live audio streams, identifies participants, and provides named transcripts using Deepgram's AI-powered transcription service.
 
 ## Features
 
-- 🎤 **Real-time Transcription**: Live speech-to-text conversion using Deepgram's WebSocket API
-- 👥 **Speaker Identification**: Each transcript is labeled with the speaker's name using Deepgram's diarization
-- 🎯 **Visual Indicators**: Shows who is currently speaking with visual cues
-- 📱 **Side Panel Control**: Start/stop transcript from the side panel
-- 🖥️ **Main Stage Display**: Full-screen transcript view for all participants
-- 🔧 **Deepgram Integration**: Professional-grade speech-to-text accuracy with real-time processing
-- 🎨 **Modern UI**: Clean, responsive interface with Google Material Design
-- 🎙️ **Audio Capture**: Real microphone input processing with noise suppression
-- 🔄 **Live Updates**: Real-time transcript updates as participants speak
+- 🎤 **Live Audio Capture**: Captures audio streams from Google Meet participants
+- 👥 **Participant Identification**: Maps audio streams to participant names using CSRC identifiers
+- 📝 **Real-time Transcription**: Converts speech to text using Deepgram's advanced AI models
+- 🏷️ **Named Transcripts**: Displays transcripts with speaker names in real-time
+- 🎨 **Modern UI**: Beautiful, responsive interface for both side panel and main stage
+- 🔄 **Real-time Updates**: Live updates as participants speak
 
-## Prerequisites
+## Architecture
 
-Before setting up the add-on, you'll need:
+The add-on consists of several key components:
 
-1. **Google Cloud Project** with the following APIs enabled:
-   - Google Workspace Marketplace SDK
-   - Google Workspace add-ons API
+1. **Meet Media API Integration** (`src/meet-media-api.js`)
+   - Handles Google Meet participant tracking
+   - Maps CSRC identifiers to participant names
+   - Simulates audio stream processing
 
-2. **Deepgram Account** with API key:
-   - Sign up at [Deepgram](https://deepgram.com)
-   - Get your API key from the dashboard
+2. **Deepgram Integration** (`src/deepgram-integration.js`)
+   - Real-time speech-to-text conversion
+   - Speaker diarization for multiple speakers
+   - WebSocket-based streaming API
 
-3. **Web Hosting** for deployment:
-   - GitHub Pages, Firebase Hosting, Netlify, or Vercel
+3. **Main Application** (`src/main.js`)
+   - Orchestrates the entire transcription process
+   - Handles UI updates and user interactions
+   - Manages the connection between Meet and Deepgram
 
-## Installation & Setup
+4. **User Interface**
+   - `sidepanel.html`: Control panel for starting/stopping transcription
+   - `mainstage.html`: Main display for live transcripts
 
-### 1. Install Dependencies
+## Setup Instructions
+
+### 1. Get Google Cloud Service Account Private Key
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Navigate to **IAM & Admin** → **Service Accounts**
+3. Find your service account: `service-409997382473@gcp-sa-gsuiteaddons.iam.gserviceaccount.com`
+4. Click on it → **Keys** tab → **Add Key** → **Create new key** → **JSON**
+5. Download the JSON file and extract the `private_key` field
+
+### 2. Update Configuration
+
+Edit `src/main.js` and replace `YOUR_PRIVATE_KEY_HERE` with your actual private key:
+
+```javascript
+const GOOGLE_CLOUD_CREDENTIALS = {
+  serviceAccountEmail: 'service-409997382473@gcp-sa-gsuiteaddons.iam.gserviceaccount.com',
+  privateKey: '-----BEGIN PRIVATE KEY-----\nYOUR_ACTUAL_PRIVATE_KEY_HERE\n-----END PRIVATE KEY-----\n',
+  clientId: '409997382473-4dj4ucqs13cmtbt8p57t74elliqa05ch.apps.googleusercontent.com'
+};
+```
+
+### 3. Install Dependencies
 
 ```bash
-cd "/home/tejs/Downloads/Meet Add on"
 npm install
 ```
 
-### 2. Configure Environment Variables
-
-Update the following values in `src/main.js`:
-
-```javascript
-const CLOUD_PROJECT_NUMBER = 'YOUR_GOOGLE_CLOUD_PROJECT_NUMBER';
-const MAIN_STAGE_URL = 'YOUR_DEPLOYED_MAIN_STAGE_URL';
-const DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY';
-```
-
-### 3. Build the Project
+### 4. Build the Project
 
 ```bash
 npm run build
 ```
 
-This will create a `dist/bundle.js` file with all the compiled code.
+### 5. Deploy to Web Server
 
-### 4. Deploy to Web Hosting
-
-Deploy the following files to your web hosting service:
-
+Upload the following files to your web server:
+- `dist/bundle.js` (and `dist/bundle.js.map`)
 - `sidepanel.html`
 - `mainstage.html`
-- `dist/bundle.js`
-- Any logo images you want to use
+- `addon-manifest.json`
 
-### 5. Update Manifest
+### 6. Install in Google Meet
 
-Update `addon-manifest.json` with your actual URLs:
+1. Go to [Google Workspace Marketplace](https://workspace.google.com/marketplace)
+2. Upload your `addon-manifest.json`
+3. Install the add-on in your Google Workspace domain
+4. The add-on will appear in Google Meet sessions
 
-```json
-{
-  "addOns": {
-    "common": {
-      "name": "Live Transcript",
-      "logoUrl": "https://your-domain.com/logo.png"
-    },
-    "meet": {
-      "web": {
-        "sidePanelUrl": "https://your-domain.com/sidepanel.html",
-        "supportsScreenSharing": true,
-        "addOnOrigins": ["https://your-domain.com"],
-        "logoUrl": "https://your-domain.com/meet-logo.png",
-        "darkModeLogoUrl": "https://your-domain.com/meet-logo-dark.png"
-      }
-    }
-  }
-}
-```
+## Usage
 
-### 6. Deploy the Add-on
+### Starting Transcription
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Navigate to **APIs & Services** > **Google Workspace Marketplace SDK**
-3. Click **HTTP deployments** tab
-4. Click **Create new deployment**
-5. Enter a deployment ID (e.g., "live-transcript-v1")
-6. Paste your manifest JSON in the deployment specification
-7. Click **Submit**
+1. Join a Google Meet session
+2. Click on the add-on icon in the Meet interface
+3. Click **"Start Activity"** to open the main transcript view
+4. Click **"Start Live Transcript"** to begin transcription
+5. Watch as participants' speech is converted to text with their names
 
-### 7. Install and Test
+### Features
 
-1. In the Google Workspace Marketplace SDK, click **Install** under your deployment
-2. Go to [meet.google.com](https://meet.google.com)
-3. Start a meeting
-4. Click the **Activities** button (puzzle piece icon)
-5. Select your "Live Transcript" add-on
-6. Click **Launch Transcript in Main Stage** from the side panel
-7. Click **Start Live Transcript** to begin transcription
+- **Real-time Updates**: Transcripts appear as participants speak
+- **Speaker Identification**: Each transcript line shows who spoke
+- **Confidence Scores**: See how confident the AI is about each transcription
+- **Speaking Indicators**: Visual indicators show who is currently speaking
+- **Participant Management**: Automatic detection of participants joining/leaving
 
-## Development
+## Technical Details
 
-### Local Development
+### CSRC Mapping
 
-```bash
-npm run dev
-```
-
-This will start webpack in watch mode, automatically rebuilding when you make changes.
-
-### Project Structure
-
-```
-├── src/
-│   ├── main.js                 # Main application logic
-│   └── deepgram-integration.js # Deepgram WebSocket integration
-├── sidepanel.html              # Side panel interface
-├── mainstage.html              # Main stage interface
-├── package.json                # Dependencies and scripts
-├── webpack.config.js          # Webpack configuration
-├── addon-manifest.json         # Add-on manifest for deployment
-└── README.md                   # This file
-```
-
-### Key Components
-
-- **Side Panel**: Control interface for starting/stopping transcription
-- **Main Stage**: Full-screen transcript display for all participants
-- **Deepgram Integration**: Real-time WebSocket connection for speech-to-text
-- **Participant Management**: Tracks and displays transcripts by speaker
-- **Audio Capture**: Handles microphone input and audio processing
-
-## Configuration Options
-
-### Deepgram Settings
-
-You can customize the Deepgram transcription settings in `src/deepgram-integration.js`:
+The add-on uses CSRC (Contributing Source) identifiers from RTP audio packets to map audio streams to participant names:
 
 ```javascript
-const options = {
-  model: 'nova-2',           // Deepgram model
-  language: 'en-US',         // Language code
-  punctuate: true,           // Add punctuation
-  profanity_filter: false,   // Filter profanity
-  redact: false,             // Redact sensitive info
-  diarize: true              // Enable speaker diarization
-};
+// When participant joins
+this.csrcToParticipant.set(participant.csrc, participant.id);
+
+// When audio data arrives
+const participantId = this.csrcToParticipant.get(csrc);
+const participant = this.participants.get(participantId);
 ```
 
-### UI Customization
+### Deepgram Integration
 
-The UI can be customized by modifying the CSS in the HTML files or adding custom styles to `src/main.js`.
+The add-on sends audio data to Deepgram's streaming API with speaker diarization enabled:
+
+```javascript
+const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-2&diarize=true&interim_results=true`;
+```
+
+### Browser Compatibility
+
+The implementation is designed to work in browser environments using:
+- WebSocket connections for real-time communication
+- Web Audio API for audio processing
+- Google Meet Add-ons framework for integration
+
+## Testing
+
+Run the test suite to verify everything works:
+
+```bash
+# Test individual components
+node test-meet-media-api.mjs
+node test-integration.mjs
+
+# Test complete integration
+node test-complete.mjs
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **"Missing required Meet SDK URL parameter"**
-   - This is expected when running locally
-   - The error disappears when running within Meet
-
-2. **Deepgram connection fails**
-   - Verify your API key is correct
-   - Check that your domain is whitelisted in Deepgram settings
-
-3. **Audio not being captured**
-   - Ensure microphone permissions are granted
-   - Check browser compatibility (Chrome/Edge recommended)
-
-4. **Add-on not appearing in Meet**
-   - Verify the manifest URLs are correct
-   - Ensure the add-on is properly installed
-   - Check that all required APIs are enabled
+1. **Authentication Errors**: Ensure your service account private key is correctly formatted
+2. **Audio Capture Issues**: Check browser permissions for microphone access
+3. **Deepgram Connection**: Verify your Deepgram API key is valid
+4. **Participant Detection**: The add-on uses simulation mode for testing
 
 ### Debug Mode
 
-Enable debug logging by opening browser DevTools and checking the console for detailed logs.
+Enable debug logging by opening browser developer tools and checking the console for detailed logs.
 
-## Security Considerations
+## API Keys Required
 
-- Store API keys securely (consider using environment variables)
-- Implement proper CORS headers for your domain
-- Use HTTPS for all deployments
-- Regularly rotate API keys
+- **Google Cloud Service Account**: For Meet Media API access
+- **Deepgram API Key**: For speech-to-text conversion (already included: `306114cbf5e0f315e34cc259af3d16b9fe000992`)
 
-## Contributing
+## File Structure
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+```
+├── src/
+│   ├── main.js                 # Main application logic
+│   ├── meet-media-api.js      # Google Meet integration
+│   └── deepgram-integration.js # Deepgram speech-to-text
+├── dist/
+│   ├── bundle.js              # Built application
+│   └── bundle.js.map          # Source map
+├── sidepanel.html             # Side panel UI
+├── mainstage.html             # Main stage UI
+├── addon-manifest.json        # Add-on configuration
+├── package.json               # Dependencies
+├── webpack.config.cjs         # Build configuration
+└── test-*.mjs                # Test files
+```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For issues and questions:
-- Check the troubleshooting section above
-- Review Google Meet Add-ons documentation
-- Consult Deepgram API documentation
-- Open an issue in the repository
-
-## Roadmap
-
-- [ ] Real participant detection (currently uses mock data)
-- [ ] Export transcripts functionality
-- [ ] Multiple language support
-- [ ] Custom speaker names
-- [ ] Transcript search and filtering
-- [ ] Integration with Google Drive for transcript storage
-
+This project is for educational and demonstration purposes. Please ensure you comply with Google Meet's terms of service and Deepgram's usage policies when deploying.

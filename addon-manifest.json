@@ -2,17 +2,25 @@
   "addOns": {
     "common": {
       "name": "Live Transcript",
-      "logoUrl": "https://your-domain.com/logo.png"
+      "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon./logo.png"
     },
     "meet": {
       "web": {
-        "sidePanelUrl": "https://your-domain.com/sidepanel.html",
+        "sidePanelUrl": "https://sudugutejasvi.github.io/meet-transcript-addon./sidepanel.html",
         "supportsScreenSharing": true,
-        "addOnOrigins": ["https://your-domain.com"],
-        "logoUrl": "https://your-domain.com/meet-logo.png",
-        "darkModeLogoUrl": "https://your-domain.com/meet-logo-dark.png"
+        "addOnOrigins": ["https://sudugutejasvi.github.io"],
+        "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon./meet-logo.png",
+        "darkModeLogoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon./meet-logo-dark.png"
       }
     }
+  },
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/meetings.conference.media.audio.readonly",
+    "https://www.googleapis.com/auth/meetings.conference.media.video.readonly",
+    "https://www.googleapis.com/auth/meetings.conference.participant.readonly"
+  ],
+  "runtime": {
+    "type": "NODEJS",
+    "version": "18"
   }
 }
-

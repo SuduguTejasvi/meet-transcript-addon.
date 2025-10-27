@@ -5,154 +5,367 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live Transcript - Side Panel</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Google Sans', Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
             background: #f8f9fa;
-            min-height: 100vh;
+            color: #202124;
+            line-height: 1.5;
         }
+
         .container {
+            padding: 20px;
             max-width: 400px;
+            margin: 0 auto;
         }
-        h1 {
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
             color: #1a73e8;
             font-size: 24px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
+            margin-bottom: 8px;
         }
-        .description {
+
+        .header p {
             color: #5f6368;
-            margin-bottom: 30px;
-            line-height: 1.5;
             font-size: 14px;
         }
-        .button {
+
+        .status-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-left: 4px solid #1a73e8;
+        }
+
+        .status-card h3 {
+            color: #1a73e8;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #34a853;
+        }
+
+        .status-dot.inactive {
+            background: #ea4335;
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: #5f6368;
+        }
+
+        .controls {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .btn {
             width: 100%;
             padding: 12px 20px;
-            background: #1a73e8;
-            color: white;
             border: none;
             border-radius: 8px;
             font-size: 16px;
             font-weight: 500;
             cursor: pointer;
+            transition: all 0.2s ease;
             margin-bottom: 10px;
-            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #1a73e8;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #1557b0;
+        }
+
+        .btn-success {
+            background: #34a853;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #2d8f47;
+        }
+
+        .btn-danger {
+            background: #ea4335;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #d33b2c;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .participants-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .participants-card h3 {
+            color: #1a73e8;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .participant-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f3f4;
+        }
+
+        .participant-item:last-child {
+            border-bottom: none;
+        }
+
+        .participant-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #e8f0fe;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-        }
-        .button:hover {
-            background: #1557b0;
-            transform: translateY(-1px);
-        }
-        .button:disabled {
-            background: #dadce0;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .button.success {
-            background: #34a853;
-        }
-        .button.success:hover {
-            background: #2d8f47;
-        }
-        .button.danger {
-            background: #ea4335;
-        }
-        .button.danger:hover {
-            background: #d33b2c;
-        }
-        .status {
-            padding: 12px;
-            border-radius: 6px;
-            margin-top: 20px;
-            font-size: 14px;
-            font-weight: 500;
-            display: none;
-        }
-        .status.success {
-            background: #e8f5e8;
-            color: #137333;
-            border: 1px solid #c8e6c9;
-        }
-        .status.error {
-            background: #fce8e6;
-            color: #d93025;
-            border: 1px solid #ffcdd2;
-        }
-        .status.info {
-            background: #e8f0fe;
-            color: #1a73e8;
-            border: 1px solid #bbdefb;
-        }
-        .features {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .features h3 {
-            margin: 0 0 15px 0;
-            color: #1a73e8;
             font-size: 16px;
         }
-        .features ul {
-            margin: 0;
-            padding-left: 20px;
-            color: #5f6368;
-            font-size: 14px;
-            line-height: 1.5;
+
+        .participant-info {
+            flex: 1;
         }
-        .features li {
-            margin-bottom: 8px;
+
+        .participant-name {
+            font-weight: 500;
+            color: #202124;
+            font-size: 14px;
+        }
+
+        .participant-status {
+            font-size: 12px;
+            color: #5f6368;
+        }
+
+        .speaking-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #34a853;
+            animation: pulse 1s infinite;
+        }
+
+        .speaking-indicator.inactive {
+            background: #dadce0;
+            animation: none;
+        }
+
+        .status-message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status-message.success {
+            background: #e8f5e8;
+            color: #137333;
+            border: 1px solid #34a853;
+        }
+
+        .status-message.error {
+            background: #fce8e6;
+            color: #d93025;
+            border: 1px solid #ea4335;
+        }
+
+        .status-message.info {
+            background: #e8f0fe;
+            color: #1a73e8;
+            border: 1px solid #1a73e8;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #1a73e8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            color: #5f6368;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎤 Live Transcript</h1>
-        <div class="description">
-            Start live transcription for all meeting participants. Each person's speech will be transcribed and displayed with their name in real-time.
+        <div class="header">
+            <h1>🎤 Live Transcript</h1>
+            <p>Real-time speech-to-text for Google Meet</p>
         </div>
-        
-        <div class="features">
-            <h3>✨ Features</h3>
-            <ul>
-                <li>Real-time speech-to-text conversion</li>
-                <li>Speaker identification and labeling</li>
-                <li>Visual speaking indicators</li>
-                <li>Full-screen transcript view</li>
-                <li>Professional Deepgram integration</li>
-            </ul>
+
+        <div class="status-card">
+            <h3>Connection Status</h3>
+            <div class="status-indicator">
+                <div class="status-dot" id="status-dot"></div>
+                <span class="status-text" id="status-text">Initializing...</span>
+            </div>
+            <div id="status-message" class="status-message"></div>
         </div>
-        
-        <button id="start-activity" class="button">
-            🚀 Launch Transcript in Main Stage
-        </button>
-        
-        <button id="start-transcript" class="button success">
-            ▶️ Start Live Transcript
-        </button>
-        
-        <button id="stop-transcript" class="button danger" disabled>
-            ⏹️ Stop Transcript
-        </button>
-        
-        <div id="status" class="status"></div>
+
+        <div class="controls">
+            <button id="start-activity" class="btn btn-primary">
+                🚀 Start Activity
+            </button>
+            <button id="start-transcript" class="btn btn-success">
+                🎤 Start Live Transcript
+            </button>
+            <button id="stop-transcript" class="btn btn-danger" disabled>
+                ⏹️ Stop Transcript
+            </button>
+        </div>
+
+        <div class="participants-card">
+            <h3>Participants</h3>
+            <div id="participants-list">
+                <div style="text-align: center; color: #5f6368; padding: 20px;">
+                    <div class="loading"></div>
+                    <p style="margin-top: 10px;">Detecting participants...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Powered by Deepgram & Google Meet Media API</p>
+        </div>
     </div>
-    
-    <script src="./dist/bundle.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // Library name (`transcriptAddon`) is defined in the webpack config.
-            // The function (`setUpAddon`) is defined in main.js.
-            transcriptAddon.setUpAddon();
+
+    <script type="module">
+        import { setUpAddon } from './dist/bundle.js';
+
+        // Initialize the add-on when the page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await setUpAddon();
+                updateStatus('Add-on loaded successfully!', 'success');
+            } catch (error) {
+                console.error('Error initializing add-on:', error);
+                updateStatus('Error loading add-on: ' + error.message, 'error');
+            }
         });
+
+        // Status update function
+        function updateStatus(message, type = 'info') {
+            const statusMessage = document.getElementById('status-message');
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            
+            if (statusMessage) {
+                statusMessage.textContent = message;
+                statusMessage.className = `status-message ${type}`;
+                statusMessage.style.display = 'block';
+                
+                // Auto-hide after 5 seconds
+                setTimeout(() => {
+                    statusMessage.style.display = 'none';
+                }, 5000);
+            }
+            
+            if (statusDot && statusText) {
+                if (type === 'success') {
+                    statusDot.style.background = '#34a853';
+                    statusText.textContent = 'Connected';
+                } else if (type === 'error') {
+                    statusDot.style.background = '#ea4335';
+                    statusText.textContent = 'Error';
+                } else {
+                    statusDot.style.background = '#1a73e8';
+                    statusText.textContent = 'Ready';
+                }
+            }
+        }
+
+        // Simulate participant updates for demo
+        function simulateParticipants() {
+            const participantsList = document.getElementById('participants-list');
+            const mockParticipants = [
+                { name: 'John Doe', isSpeaking: false },
+                { name: 'Jane Smith', isSpeaking: true },
+                { name: 'Bob Johnson', isSpeaking: false },
+                { name: 'Alice Brown', isSpeaking: false }
+            ];
+
+            participantsList.innerHTML = '';
+            mockParticipants.forEach(participant => {
+                const participantDiv = document.createElement('div');
+                participantDiv.className = 'participant-item';
+                participantDiv.innerHTML = `
+                    <div class="participant-avatar">${participant.name.charAt(0)}</div>
+                    <div class="participant-info">
+                        <div class="participant-name">${participant.name}</div>
+                        <div class="participant-status">${participant.isSpeaking ? 'Speaking' : 'Listening'}</div>
+                    </div>
+                    <div class="speaking-indicator ${participant.isSpeaking ? '' : 'inactive'}"></div>
+                `;
+                participantsList.appendChild(participantDiv);
+            });
+        }
+
+        // Start simulation after a delay
+        setTimeout(simulateParticipants, 2000);
     </script>
 </body>
 </html>
