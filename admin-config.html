@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Configuration - Live Transcript</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a73e8;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #333;
+            margin-top: 30px;
+        }
+        p {
+            color: #555;
+            margin-bottom: 15px;
+        }
+        ul {
+            color: #555;
+        }
+        .admin-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #1a73e8;
+        }
+        .warning {
+            background-color: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+        .info {
+            background-color: #d1ecf1;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #17a2b8;
+            margin: 20px 0;
+        }
+        .code {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            border: 1px solid #dee2e6;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #dee2e6;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Admin Configuration Guide</h1>
+        <p>This guide is for Google Workspace administrators who need to configure Live Transcript for their organization.</p>
+        
+        <div class="warning">
+            <h3>⚠️ Admin Access Required</h3>
+            <p>This configuration requires Google Workspace administrator privileges. Only users with admin access can modify these settings.</p>
+        </div>
+        
+        <h2>🔧 Installation & Deployment</h2>
+        
+        <div class="admin-section">
+            <h3>1. Install for Organization</h3>
+            <ol>
+                <li>Log in to your Google Workspace Admin Console</li>
+                <li>Navigate to <strong>Apps</strong> → <strong>Google Workspace Marketplace</strong></li>
+                <li>Search for "Live Transcript"</li>
+                <li>Click on the Live Transcript listing</li>
+                <li>Click <strong>"Install for Organization"</strong></li>
+                <li>Review and accept the permissions</li>
+                <li>Configure deployment settings (see below)</li>
+            </ol>
+        </div>
+        
+        <div class="admin-section">
+            <h3>2. Deployment Configuration</h3>
+            <p>Choose how Live Transcript is deployed in your organization:</p>
+            
+            <table>
+                <tr>
+                    <th>Deployment Option</th>
+                    <th>Description</th>
+                    <th>Recommended For</th>
+                </tr>
+                <tr>
+                    <td><strong>All Users</strong></td>
+                    <td>Automatically installs for all users in the organization</td>
+                    <td>Small organizations, universal access needed</td>
+                </tr>
+                <tr>
+                    <td><strong>Specific OUs</strong></td>
+                    <td>Install only for selected organizational units</td>
+                    <td>Large organizations, department-specific needs</td>
+                </tr>
+                <tr>
+                    <td><strong>User Choice</strong></td>
+                    <td>Users can install individually from the marketplace</td>
+                    <td>Organizations with flexible policies</td>
+                </tr>
+            </table>
+        </div>
+        
+        <h2>⚙️ Permission Configuration</h2>
+        
+        <div class="admin-section">
+            <h3>Required Permissions</h3>
+            <p>Live Transcript requires the following Google Workspace permissions:</p>
+            <ul>
+                <li><strong>Google Meet Access:</strong> To join meetings and access audio</li>
+                <li><strong>Participant Information:</strong> To identify speakers</li>
+                <li><strong>Audio Stream Access:</strong> To capture audio for transcription</li>
+                <li><strong>Third-party Integration:</strong> To connect with Deepgram for transcription</li>
+            </ul>
+        </div>
+        
+        <div class="admin-section">
+            <h3>OAuth Scopes</h3>
+            <p>The following OAuth scopes are requested by Live Transcript:</p>
+            <div class="code">
+                https://www.googleapis.com/auth/meetings.conference.media.readonly<br>
+                https://www.googleapis.com/auth/meetings.conference.media.audio.readonly<br>
+                https://www.googleapis.com/auth/meetings.conference.media.video.readonly<br>
+                https://www.googleapis.com/auth/meetings.conference.participant.readonly
+            </div>
+        </div>
+        
+        <h2>🛡️ Security & Privacy Settings</h2>
+        
+        <div class="admin-section">
+            <h3>Data Handling Configuration</h3>
+            <ul>
+                <li><strong>Audio Processing:</strong> Real-time only, no permanent storage</li>
+                <li><strong>Transcription Data:</strong> Processed locally, not stored on external servers</li>
+                <li><strong>Participant Information:</strong> Used only for speaker identification</li>
+                <li><strong>Meeting Data:</strong> Access limited to active meeting sessions</li>
+            </ul>
+        </div>
+        
+        <div class="admin-section">
+            <h3>Privacy Controls</h3>
+            <p>Configure privacy settings for your organization:</p>
+            <ul>
+                <li><strong>Meeting Consent:</strong> Require explicit consent before transcription starts</li>
+                <li><strong>Data Retention:</strong> Set policies for any temporary data storage</li>
+                <li><strong>Access Logging:</strong> Enable/disable usage logging</li>
+                <li><strong>Third-party Access:</strong> Control integration with external services</li>
+            </ul>
+        </div>
+        
+        <h2>📊 Usage Policies</h2>
+        
+        <div class="admin-section">
+            <h3>Organization Policies</h3>
+            <p>Set up policies for Live Transcript usage:</p>
+            <ul>
+                <li><strong>Allowed Meeting Types:</strong> Internal meetings, external meetings, or both</li>
+                <li><strong>Recording Policies:</strong> When transcription is allowed</li>
+                <li><strong>Data Sharing:</strong> Policies for sharing transcribed content</li>
+                <li><strong>Compliance Requirements:</strong> Industry-specific compliance needs</li>
+            </ul>
+        </div>
+        
+        <div class="admin-section">
+            <h3>User Training</h3>
+            <p>Recommended training topics for users:</p>
+            <ul>
+                <li>How to start and stop transcription</li>
+                <li>Privacy considerations and best practices</li>
+                <li>When to use transcription features</li>
+                <li>How to handle transcribed content</li>
+            </ul>
+        </div>
+        
+        <h2>🔍 Monitoring & Analytics</h2>
+        
+        <div class="admin-section">
+            <h3>Usage Analytics</h3>
+            <p>Monitor Live Transcript usage across your organization:</p>
+            <ul>
+                <li><strong>Installation Metrics:</strong> Track adoption rates</li>
+                <li><strong>Usage Statistics:</strong> Monitor feature utilization</li>
+                <li><strong>Performance Data:</strong> Track transcription accuracy and speed</li>
+                <li><strong>Error Reports:</strong> Monitor technical issues</li>
+            </ul>
+        </div>
+        
+        <div class="admin-section">
+            <h3>Access Logs</h3>
+            <p>Review access and usage logs:</p>
+            <ul>
+                <li>User login and authentication events</li>
+                <li>Meeting access and transcription sessions</li>
+                <li>Permission changes and policy updates</li>
+                <li>Security events and alerts</li>
+            </ul>
+        </div>
+        
+        <h2>🚨 Troubleshooting</h2>
+        
+        <div class="admin-section">
+            <h3>Common Admin Issues</h3>
+            
+            <h4>Users Cannot Install</h4>
+            <div class="code">
+                <strong>Issue:</strong> Users report they cannot install Live Transcript<br>
+                <strong>Solution:</strong> Check marketplace app approval status and user permissions
+            </div>
+            
+            <h4>Permission Errors</h4>
+            <div class="code">
+                <strong>Issue:</strong> Users get permission denied errors<br>
+                <strong>Solution:</strong> Verify OAuth scopes are approved and user roles have necessary access
+            </div>
+            
+            <h4>Transcription Not Working</h4>
+            <div class="code">
+                <strong>Issue:</strong> Transcription fails to start<br>
+                <strong>Solution:</strong> Check Google Meet API access and third-party service connectivity
+            </div>
+        </div>
+        
+        <h2>📞 Support & Resources</h2>
+        
+        <div class="info">
+            <h3>Admin Support</h3>
+            <p>For administrative support and configuration assistance:</p>
+            <ul>
+                <li><strong>Email:</strong> <a href="mailto:admin@meet-transcript.com">admin@meet-transcript.com</a></li>
+                <li><strong>Documentation:</strong> <a href="help.html">Help & FAQ</a></li>
+                <li><strong>Technical Support:</strong> <a href="support.html">Support Portal</a></li>
+                <li><strong>GitHub Issues:</strong> <a href="https://github.com/SuduguTejasvi/meet-transcript-addon/issues" target="_blank">Report Issues</a></li>
+            </ul>
+        </div>
+        
+        <div class="admin-section">
+            <h3>Additional Resources</h3>
+            <ul>
+                <li><a href="https://support.google.com/a/answer/16333500" target="_blank">Google Workspace Admin Help</a></li>
+                <li><a href="https://developers.google.com/workspace/marketplace" target="_blank">Google Workspace Marketplace Documentation</a></li>
+                <li><a href="privacy-policy.html">Privacy Policy</a></li>
+                <li><a href="terms-of-service.html">Terms of Service</a></li>
+            </ul>
+        </div>
+        
+        <div class="warning">
+            <h3>⚠️ Important Reminders</h3>
+            <ul>
+                <li>Regularly review and update privacy policies</li>
+                <li>Monitor usage patterns and compliance</li>
+                <li>Keep users informed about data handling practices</li>
+                <li>Ensure proper training and documentation</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help & FAQ - Live Transcript</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a73e8;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #333;
+            margin-top: 30px;
+        }
+        p {
+            color: #555;
+            margin-bottom: 15px;
+        }
+        ul, ol {
+            color: #555;
+        }
+        .faq-category {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #1a73e8;
+        }
+        .faq-item {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 3px solid #1a73e8;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .faq-question {
+            font-weight: bold;
+            color: #1a73e8;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .faq-answer {
+            color: #555;
+        }
+        .tip {
+            background-color: #e8f5e8;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #28a745;
+            margin: 20px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+        .code {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            border: 1px solid #dee2e6;
+            margin: 10px 0;
+        }
+        a {
+            color: #1a73e8;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Help & FAQ</h1>
+        <p>Find answers to common questions about Live Transcript and learn how to use all its features effectively.</p>
+        
+        <div class="toc">
+            <h2>📋 Table of Contents</h2>
+            <ul>
+                <li><a href="#getting-started">Getting Started</a></li>
+                <li><a href="#installation">Installation & Setup</a></li>
+                <li><a href="#using-transcript">Using Transcription</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+                <li><a href="#privacy-security">Privacy & Security</a></li>
+                <li><a href="#technical">Technical Questions</a></li>
+                <li><a href="#browser-specific">Browser-Specific Issues</a></li>
+            </ul>
+        </div>
+        
+        <div id="getting-started" class="faq-category">
+            <h2>🚀 Getting Started</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">What is Live Transcript?</div>
+                <div class="faq-answer">Live Transcript is a Google Meet add-on that provides real-time speech-to-text transcription during your meetings. It captures audio from participants and converts it to text with speaker identification.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">How does Live Transcript work?</div>
+                <div class="faq-answer">Live Transcript uses advanced AI technology to process audio streams from Google Meet in real-time. It identifies speakers and converts their speech to text, displaying the results in an easy-to-read format.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What do I need to use Live Transcript?</div>
+                <div class="faq-answer">You need a Google Workspace account with Google Meet access, a modern web browser (Chrome, Firefox, Safari, or Edge), microphone permissions, and a stable internet connection.</div>
+            </div>
+        </div>
+        
+        <div id="installation" class="faq-category">
+            <h2>📥 Installation & Setup</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">How do I install Live Transcript?</div>
+                <div class="faq-answer">Go to the Google Workspace Marketplace, search for "Live Transcript," and click Install. Follow the prompts to grant necessary permissions. See our <a href="setup.html">Setup Guide</a> for detailed instructions.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Why can't I see the Live Transcript icon in Google Meet?</div>
+                <div class="faq-answer">Make sure the add-on is properly installed and you've granted all necessary permissions. Refresh your browser page and check that you're using a supported browser with microphone access enabled.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What permissions does Live Transcript need?</div>
+                <div class="faq-answer">Live Transcript needs access to Google Meet sessions, audio streams, and participant information. These permissions are required for real-time transcription functionality.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Can I install Live Transcript for my entire organization?</div>
+                <div class="faq-answer">Yes, Google Workspace administrators can install Live Transcript for their organization. See our <a href="admin-config.html">Admin Configuration Guide</a> for details.</div>
+            </div>
+        </div>
+        
+        <div id="using-transcript" class="faq-category">
+            <h2>🎤 Using Transcription</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">How do I start transcription in a meeting?</div>
+                <div class="faq-answer">Click the Live Transcript icon in Google Meet, then click "Start Activity" to open the main transcript view. Finally, click "Start Live Transcript" to begin real-time transcription.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Can I pause or stop transcription?</div>
+                <div class="faq-answer">Yes, you can pause or stop transcription at any time using the controls in the Live Transcript panel. The transcription will stop immediately, and you can restart it when needed.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">How accurate is the transcription?</div>
+                <div class="faq-answer">Transcription accuracy depends on audio quality, speaker clarity, and background noise. In good conditions, Live Transcript typically achieves 90%+ accuracy using advanced AI technology.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Can I see who is speaking?</div>
+                <div class="faq-answer">Yes, Live Transcript identifies speakers and displays their names with each transcript line. This helps you follow conversations and know who said what.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Can I copy or save the transcript?</div>
+                <div class="faq-answer">Yes, you can copy transcript text and save it for future reference. The transcript is displayed in real-time and can be copied using standard browser copy functions.</div>
+            </div>
+            
+            <div class="tip">
+                <h3>💡 Pro Tip</h3>
+                <p>For best transcription results, ensure participants speak clearly, minimize background noise, and use a good quality microphone. The better the audio input, the more accurate the transcription will be.</p>
+            </div>
+        </div>
+        
+        <div id="troubleshooting" class="faq-category">
+            <h2>🔧 Troubleshooting</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">Why isn't my microphone being detected?</div>
+                <div class="faq-answer">Check your browser's microphone permissions. Go to your browser settings and ensure microphone access is allowed for Google Meet. Also, make sure your microphone isn't muted or disabled.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Transcription is not starting - what should I do?</div>
+                <div class="faq-answer">First, check your internet connection. Then verify that microphone permissions are granted. Try refreshing the page and restarting the transcription. If the issue persists, contact support.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">The transcript text is garbled or inaccurate</div>
+                <div class="faq-answer">Poor audio quality often causes transcription issues. Check for background noise, ensure speakers are close to their microphones, and verify that audio levels are appropriate. Clear speech produces better results.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Live Transcript is running slowly or lagging</div>
+                <div class="faq-answer">This is usually due to internet connection issues or browser performance. Try closing other browser tabs, check your internet speed, and ensure you're using a supported browser version.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">I'm getting error messages - what do they mean?</div>
+                <div class="faq-answer">Error messages usually indicate permission issues, connectivity problems, or browser compatibility. Check our <a href="support.html">Support</a> page for specific error solutions, or contact support with the exact error message.</div>
+            </div>
+        </div>
+        
+        <div id="privacy-security" class="faq-category">
+            <h2>🛡️ Privacy & Security</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">Is my audio data secure?</div>
+                <div class="faq-answer">Yes, your audio is processed in real-time and is not permanently stored. All data transmission is encrypted, and we follow strict privacy guidelines. See our <a href="privacy-policy.html">Privacy Policy</a> for details.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Where is my audio data processed?</div>
+                <div class="faq-answer">Audio is processed in real-time using secure, encrypted connections. The data is not stored on our servers and is handled according to our privacy policy and industry standards.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Can other meeting participants see the transcript?</div>
+                <div class="faq-answer">Only users who have installed and activated Live Transcript can see the transcript. It's not automatically shared with other participants unless you choose to share it.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Do I need to inform participants about transcription?</div>
+                <div class="faq-answer">Yes, it's recommended to inform all meeting participants that transcription is active. This promotes transparency and ensures everyone is aware of the recording/transcription.</div>
+            </div>
+            
+            <div class="warning">
+                <h3>⚠️ Privacy Reminder</h3>
+                <p>Always inform meeting participants when transcription is active. Respect privacy preferences and be mindful of sensitive information that might be discussed.</p>
+            </div>
+        </div>
+        
+        <div id="technical" class="faq-category">
+            <h2>⚙️ Technical Questions</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">What browsers are supported?</div>
+                <div class="faq-answer">Live Transcript works with Chrome, Firefox, Safari, and Edge (latest versions). We recommend using the most recent browser version for the best experience.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Does Live Transcript work on mobile devices?</div>
+                <div class="faq-answer">Live Transcript is designed for desktop browsers. Mobile support may be limited due to browser restrictions and audio processing requirements.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What internet speed do I need?</div>
+                <div class="faq-answer">A stable internet connection with at least 1 Mbps upload speed is recommended for optimal transcription performance. Higher speeds provide better real-time processing.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Can I use Live Transcript in large meetings?</div>
+                <div class="faq-answer">Yes, Live Transcript can handle meetings with multiple participants. However, very large meetings (50+ participants) may experience reduced performance depending on audio quality and network conditions.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Does Live Transcript work with Google Meet's recording feature?</div>
+                <div class="faq-answer">Live Transcript works independently of Google Meet's recording feature. You can use both simultaneously, but they serve different purposes - Live Transcript provides real-time text, while recording captures video/audio.</div>
+            </div>
+        </div>
+        
+        <div id="browser-specific" class="faq-category">
+            <h2>🌐 Browser-Specific Issues</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">Chrome: How do I enable microphone permissions?</div>
+                <div class="faq-answer">Click the lock icon in the address bar, ensure "Microphone" is set to "Allow," and refresh the page if needed. You can also check Chrome's site settings for Google Meet.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Firefox: Microphone not working</div>
+                <div class="faq-answer">Click the shield icon in the address bar, go to "Permissions," and ensure microphone access is allowed. Check Firefox's privacy settings and refresh the page.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Safari: Permission issues</div>
+                <div class="faq-answer">Go to Safari > Preferences > Websites, select "Microphone," and ensure it's set to "Allow" for Google Meet. You may need to restart Safari after changing permissions.</div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Edge: Audio access problems</div>
+                <div class="faq-answer">Click the lock icon in the address bar, check microphone permissions, and ensure Edge has access to your microphone. Update to the latest version if issues persist.</div>
+            </div>
+        </div>
+        
+        <div class="faq-category">
+            <h2>📞 Still Need Help?</h2>
+            <p>If you can't find the answer to your question here, we're here to help:</p>
+            <ul>
+                <li><strong>Email Support:</strong> <a href="mailto:support@meet-transcript.com">support@meet-transcript.com</a></li>
+                <li><strong>GitHub Issues:</strong> <a href="https://github.com/SuduguTejasvi/meet-transcript-addon/issues" target="_blank">Report Technical Issues</a></li>
+                <li><strong>Setup Guide:</strong> <a href="setup.html">Step-by-step installation</a></li>
+                <li><strong>Support Center:</strong> <a href="support.html">Contact information</a></li>
+            </ul>
+        </div>
+        
+        <div class="tip">
+            <h3>💡 Quick Tips</h3>
+            <ul>
+                <li>Always test Live Transcript before important meetings</li>
+                <li>Inform participants when transcription is active</li>
+                <li>Use a good quality microphone for better results</li>
+                <li>Keep your browser updated for best performance</li>
+                <li>Check internet connection stability</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
