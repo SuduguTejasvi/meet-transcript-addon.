@@ -92,6 +92,8 @@ async function initializeMeetMediaAPI() {
     await meetMediaAPI.initializeAuth();
     
     console.log('✅ Meet Media API initialized successfully');
+    console.log('📋 Note: This implementation uses the official Google Meet Media API');
+    console.log('📋 Requirements: Google Meet REST API must be enabled and Developer Preview enrollment');
     return true;
   } catch (error) {
     console.error('❌ Failed to initialize Meet Media API:', error);
@@ -301,14 +303,13 @@ async function joinCurrentMeeting() {
     // Get current meeting ID from the Meet session
     const meetingId = await getCurrentMeetingId();
     
-    if (meetingId && mainStageClient) {
-      // Pass the main stage client as the meet session
-      await meetMediaAPI.joinMeeting(meetingId, mainStageClient);
-      console.log('✅ Successfully joined meeting as media bot');
+    if (meetingId) {
+      // Join the conference using Meet Media API
+      await meetMediaAPI.joinConference(meetingId);
+      console.log('✅ Successfully joined conference using Meet Media API');
     } else {
       console.log('No active meeting found, using fallback mode');
-      // Try to get participants from the current Meet session
-      await meetMediaAPI.startRealParticipantTracking();
+      console.log('📋 Note: Conference ID is required for Meet Media API access');
     }
   } catch (error) {
     console.error('Error joining meeting:', error);

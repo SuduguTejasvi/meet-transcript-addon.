@@ -15,6 +15,7 @@
     }
   },
   "oauthScopes": [
+    "https://www.googleapis.com/auth/meetings.conference.media.readonly",
     "https://www.googleapis.com/auth/meetings.conference.media.audio.readonly",
     "https://www.googleapis.com/auth/meetings.conference.media.video.readonly",
     "https://www.googleapis.com/auth/meetings.conference.participant.readonly"
