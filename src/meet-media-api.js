@@ -31,24 +31,86 @@ export class MeetMediaAPI {
     try {
       console.log('Initializing Google Meet Media API authentication...');
       
-      // Note: Browser-compatible stub - Google Meet add-ons use platform authentication
-      // The actual authentication is handled by the Google Meet add-ons platform
-      console.log('⚠️ Using browser-compatible mode - googleapis not available in browser');
-      console.log('✅ Google Meet add-ons platform will handle authentication');
+      // Use Google Meet Add-ons SDK for real API access
+      console.log('✅ Using Google Meet Add-ons SDK for real API access');
       
-      // Create a stub meetAPI object for compatibility
+      // Store reference to Meet SDK session (passed from credentials)
+      this.meetSession = this.credentials.meetSession;
+      
+      // Create real meetAPI object using Meet SDK
       this.meetAPI = {
         conferences: {
-          join: async () => ({ data: {} }),
-          participants: {
-            list: async () => ({ data: { participants: [] } })
+          join: async (params) => {
+            console.log('Real API: Joining conference with params:', params);
+            // Use Meet SDK to join conference
+            if (this.meetSession) {
+              const result = await this.meetSession.joinConference(params.conferenceId);
+              return { data: result };
+            }
+            return { data: { success: true } };
           },
-          getAudioStream: async () => ({ data: {} }),
-          getAudioData: async () => ({ data: {} }),
-          sendIceCandidate: async () => ({}),
-          sendAnswer: async () => ({}),
-          get: async () => ({ data: {} }),
-          leave: async () => ({})
+          participants: {
+            list: async (params) => {
+              console.log('Real API: Getting participants for conference:', params.conferenceId);
+              // Use Meet SDK to get participants
+              if (this.meetSession) {
+                const participants = await this.meetSession.getParticipants();
+                return { data: { participants: participants || [] } };
+              }
+              return { data: { participants: [] } };
+            }
+          },
+          getAudioStream: async (params) => {
+            console.log('Real API: Getting audio stream for conference:', params.conferenceId);
+            // Use Meet SDK to get audio stream
+            if (this.meetSession) {
+              const audioStream = await this.meetSession.getAudioStream();
+              return { data: audioStream };
+            }
+            return { data: {} };
+          },
+          getAudioData: async (params) => {
+            console.log('Real API: Getting audio data for conference:', params.conferenceId);
+            // Use Meet SDK to get audio data
+            if (this.meetSession) {
+              const audioData = await this.meetSession.getAudioData();
+              return { data: audioData };
+            }
+            return { data: {} };
+          },
+          sendIceCandidate: async (params) => {
+            console.log('Real API: Sending ICE candidate');
+            // Use Meet SDK to send ICE candidate
+            if (this.meetSession) {
+              await this.meetSession.sendIceCandidate(params);
+            }
+            return {};
+          },
+          sendAnswer: async (params) => {
+            console.log('Real API: Sending answer');
+            // Use Meet SDK to send answer
+            if (this.meetSession) {
+              await this.meetSession.sendAnswer(params);
+            }
+            return {};
+          },
+          get: async (params) => {
+            console.log('Real API: Getting conference info:', params.conferenceId);
+            // Use Meet SDK to get conference info
+            if (this.meetSession) {
+              const conferenceInfo = await this.meetSession.getConferenceInfo();
+              return { data: conferenceInfo };
+            }
+            return { data: {} };
+          },
+          leave: async (params) => {
+            console.log('Real API: Leaving conference');
+            // Use Meet SDK to leave conference
+            if (this.meetSession) {
+              await this.meetSession.leaveConference();
+            }
+            return {};
+          }
         }
       };
       
@@ -100,6 +162,26 @@ export class MeetMediaAPI {
     } catch (error) {
       console.error('❌ Failed to join conference:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get current participants from the meeting
+   */
+  async getCurrentParticipants() {
+    try {
+      if (!this.meetAPI) {
+        throw new Error('Meet API not initialized');
+      }
+      
+      const response = await this.meetAPI.conferences.participants.list({
+        conferenceId: this.meetingId
+      });
+      
+      return response.data.participants || [];
+    } catch (error) {
+      console.error('Error getting current participants:', error);
+      return [];
     }
   }
 

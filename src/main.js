@@ -55,13 +55,19 @@ async function initializeSecureCredentials() {
 /**
  * Initialize Meet Media API
  */
-async function initializeMeetMediaAPI() {
+async function initializeMeetMediaAPI(meetSession = null) {
   try {
     console.log('Initializing Meet Media API...');
     
     // Ensure credentials are initialized
     if (!credentials) {
       throw new Error('Credentials not initialized. Call initializeSecureCredentials() first.');
+    }
+    
+    // Add Meet session to credentials for real API access
+    if (meetSession) {
+      credentials.meetSession = meetSession;
+      console.log('✅ Meet session added to credentials for real API access');
     }
     
     meetMediaAPI = new MeetMediaAPI(credentials);
@@ -217,8 +223,8 @@ export async function setUpAddon() {
     
     sidePanelClient = await session.createSidePanelClient();
     
-    // Initialize Meet Media API first
-    const mediaAPIReady = await initializeMeetMediaAPI();
+    // Initialize Meet Media API with the Meet session
+    const mediaAPIReady = await initializeMeetMediaAPI(session);
     if (!mediaAPIReady) {
       throw new Error('Failed to initialize Meet Media API');
     }
@@ -276,6 +282,12 @@ export async function initializeMainStage() {
     });
     
     mainStageClient = await session.createMainStageClient();
+    
+    // Ensure MeetMediaAPI has access to the session
+    if (meetMediaAPI && credentials) {
+      credentials.meetSession = session;
+      console.log('✅ Meet session updated for main stage');
+    }
     
     // Create transcript UI
     createTranscriptUI();
