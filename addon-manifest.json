@@ -2,15 +2,16 @@
   "addOns": {
     "common": {
       "name": "Live Transcript",
-      "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon./logo.png"
+      "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon/logo.png",
+      "useLocaleFromApp": true
     },
     "meet": {
       "web": {
-        "sidePanelUrl": "https://sudugutejasvi.github.io/meet-transcript-addon./sidepanel.html",
+        "sidePanelUrl": "https://sudugutejasvi.github.io/meet-transcript-addon/sidepanel.html",
         "supportsScreenSharing": true,
         "addOnOrigins": ["https://sudugutejasvi.github.io"],
-        "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon./meet-logo.png",
-        "darkModeLogoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon./meet-logo-dark.png"
+        "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon/meet-logo.png",
+        "darkModeLogoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon/meet-logo-dark.png"
       }
     }
   },
@@ -18,10 +19,11 @@
     "https://www.googleapis.com/auth/meetings.conference.media.readonly",
     "https://www.googleapis.com/auth/meetings.conference.media.audio.readonly",
     "https://www.googleapis.com/auth/meetings.conference.media.video.readonly",
-    "https://www.googleapis.com/auth/meetings.conference.participant.readonly"
+    "https://www.googleapis.com/auth/meetings.space.readonly"
   ],
   "runtime": {
     "type": "NODEJS",
     "version": "18"
-  }
+  },
+  "timeZone": "America/New_York"
 }

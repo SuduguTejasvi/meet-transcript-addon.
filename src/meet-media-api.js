@@ -61,7 +61,7 @@ export class MeetMediaAPI {
             'https://www.googleapis.com/auth/meetings.conference.media.readonly',
             'https://www.googleapis.com/auth/meetings.conference.media.audio.readonly',
             'https://www.googleapis.com/auth/meetings.conference.media.video.readonly',
-            'https://www.googleapis.com/auth/meetings.conference.participant.readonly'
+            'https://www.googleapis.com/auth/meetings.space.readonly'
           ]
         });
       } else if (this.credentials.accessToken) {
@@ -144,8 +144,8 @@ export class MeetMediaAPI {
       // Process each participant
       if (participantsResponse.data.participants) {
         participantsResponse.data.participants.forEach(participant => {
-          this.handleParticipantJoined(participant);
-        });
+        this.handleParticipantJoined(participant);
+      });
       }
       
       // Set up real-time participant monitoring
@@ -493,7 +493,7 @@ export class MeetMediaAPI {
     console.log('Audio data received:', audioData);
     
     // Send to audio processing callback
-    if (this.onAudioData) {
+      if (this.onAudioData) {
       this.onAudioData(audioData);
     }
   }

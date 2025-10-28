@@ -6,9 +6,12 @@ module.exports = {
   output: {
     filename: 'bundle.js',
     path: path.resolve(__dirname, 'dist'),
-    library: 'MeetTranscriptAddon',
-    libraryTarget: 'umd',
-    globalObject: 'this'
+    library: {
+      type: 'module'
+    }
+  },
+  experiments: {
+    outputModule: true
   },
   module: {
     rules: [
