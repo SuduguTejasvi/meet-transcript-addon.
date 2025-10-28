@@ -100,6 +100,13 @@ async function initializeMeetMediaAPI(meetSession = null) {
     console.log('✅ Meet Media API initialized successfully');
     console.log('📋 Note: This implementation uses the official Google Meet Media API');
     console.log('📋 Requirements: Google Meet REST API must be enabled and Developer Preview enrollment');
+
+    // Start participant tracking (tries Workspace Events via backend first)
+    try {
+      await meetMediaAPI.startParticipantTracking();
+    } catch (err) {
+      console.warn('Participant tracking failed to start:', err);
+    }
     return true;
   } catch (error) {
     console.error('❌ Failed to initialize Meet Media API:', error);

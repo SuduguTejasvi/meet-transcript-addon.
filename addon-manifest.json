@@ -19,8 +19,7 @@
     "https://www.googleapis.com/auth/meetings.space.readonly",
     "https://www.googleapis.com/auth/meetings.conference.media.readonly",
     "https://www.googleapis.com/auth/meetings.conference.media.audio.readonly",
-    "https://www.googleapis.com/auth/meetings.conference.media.video.readonly",
-    "https://www.googleapis.com/auth/drive.meet.readonly"
+    "https://www.googleapis.com/auth/meetings.conference.media.video.readonly"
   ],
   "runtime": {
     "type": "NODEJS",

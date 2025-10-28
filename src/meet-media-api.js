@@ -10,6 +10,8 @@ export class MeetMediaAPI {
     this.isConnected = false;
     this.meetingId = null;
     this.meetSession = null;
+    this.eventsBackendUrl = credentials?.eventsBackendUrl || null; // Optional backend to proxy Workspace Events/REST
+    this.developerPreviewEnabled = true; // Caller should actually gate this based on enrollment
     
     // Event handlers
     this.onParticipantJoined = null;
@@ -50,16 +52,67 @@ export class MeetMediaAPI {
         throw new Error('Meet session not initialized');
       }
       
-      // The Meet Add-ons SDK doesn't have getParticipants() method
-      // We need to use Workspace Events API or simulate participants
-      console.log('⚠️ Meet Add-ons SDK has limited participant access');
-      console.log('📋 Using simulated participants for demonstration');
+      // Try Workspace Events API (via backend proxy) if configured
+      const eventsParticipants = await this.fetchParticipantsViaWorkspaceEvents();
+      if (eventsParticipants && eventsParticipants.length > 0) {
+        return eventsParticipants;
+      }
       
-      // Return simulated participants for now
+      // Fallback: simulated participants
+      console.log('⚠️ Meet Add-ons SDK has limited participant access');
+      console.log('📋 Falling back to simulated participants');
       return this.getSimulatedParticipants();
       
     } catch (error) {
       console.error('Error getting current participants:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Attempt to fetch participants via Google Workspace Events API through a backend proxy.
+   * Notes:
+   * - Workspace Events API is subscription/webhook based and cannot be called directly from the client.
+   * - Provide credentials.eventsBackendUrl which exposes an endpoint
+   *   like GET /participants?meetingId=... returning [{id, name, email, isLocal}].
+   */
+  async fetchParticipantsViaWorkspaceEvents() {
+    try {
+      if (!this.eventsBackendUrl) {
+        return [];
+      }
+
+      // Determine a meeting ID from session if available
+      const meetingInfo = (this.meetSession && this.meetSession.getMeetingInfo)
+        ? await this.meetSession.getMeetingInfo()
+        : null;
+      const meetingId = meetingInfo?.meetingId || meetingInfo?.id || this.meetingId;
+      if (!meetingId) {
+        return [];
+      }
+
+      const url = `${this.eventsBackendUrl.replace(/\/$/, '')}/participants?meetingId=${encodeURIComponent(meetingId)}`;
+      const res = await fetch(url, { method: 'GET', credentials: 'omit' });
+      if (!res.ok) {
+        console.warn('Workspace Events backend returned non-OK status:', res.status);
+        return [];
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) return [];
+      // Normalize
+      return data.map(p => ({
+        id: p.id || p.participantId || p.name || `participant_${Math.random().toString(36).slice(2)}`,
+        name: p.name || p.displayName || 'Unknown Participant',
+        email: p.email || '',
+        isLocal: !!p.isLocal,
+        isSpeaking: false,
+        avatar: '👤',
+        transcript: '',
+        lastSpoke: null,
+        joinedAt: new Date().toISOString()
+      }));
+    } catch (err) {
+      console.warn('Failed to fetch participants via Workspace Events backend:', err);
       return [];
     }
   }
@@ -137,8 +190,8 @@ export class MeetMediaAPI {
     try {
       console.log('Starting participant tracking with Meet Add-ons SDK...');
       
-      // Get simulated participants
-      const participants = this.getSimulatedParticipants();
+      // Prefer real participants via Workspace Events API backend when available
+      const participants = await this.getCurrentParticipants();
       
       console.log('Simulated participants:', participants);
       
@@ -147,7 +200,7 @@ export class MeetMediaAPI {
         this.handleParticipantJoined(participant);
       });
       
-      console.log('✅ Participant tracking started with simulated data');
+      console.log('✅ Participant tracking started');
     } catch (error) {
       console.error('Error starting participant tracking:', error);
       throw error;
@@ -255,10 +308,14 @@ export class MeetMediaAPI {
     try {
       console.log('Starting audio monitoring...');
       
-      // Note: Direct audio access is not available in Meet Add-ons iframe
-      // This would require Meet Media API with Developer Preview enrollment
-      console.log('⚠️ Direct audio access not available in Meet Add-ons iframe');
-      console.log('📋 Audio monitoring would require Meet Media API with Developer Preview');
+      // Note: Direct audio access is not available in Meet Add-ons iframe.
+      // Real-time audio requires Meet Media API with Developer Preview enrollment.
+      if (!this.developerPreviewEnabled) {
+        console.log('⚠️ Developer Preview not enabled. Skipping Meet Media API audio.');
+        return true;
+      }
+      console.log('📋 Meet Media API audio capture requires a separate client (WebRTC) joining the call.');
+      console.log('📋 Implement a backend or native client to join and forward audio to this add-on.');
       
       return true;
     } catch (error) {

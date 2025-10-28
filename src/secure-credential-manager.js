@@ -71,6 +71,7 @@ export class SecureCredentialManager {
           deepgramApiKey: process.env.DEEPGRAM_API_KEY || '306114cbf5e0f315e34cc259af3d16b9fe000992',
           mainStageUrl: process.env.MAIN_STAGE_URL || window.location.origin + '/mainstage.html',
           sidePanelUrl: process.env.SIDE_PANEL_URL || window.location.origin + '/sidepanel.html',
+          eventsBackendUrl: process.env.EVENTS_BACKEND_URL || null,
           nodeEnv: 'production',
           logLevel: 'info'
         };
