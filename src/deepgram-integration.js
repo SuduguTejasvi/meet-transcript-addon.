@@ -340,19 +340,19 @@ export class MeetParticipantManager {
   }
 
   /**
-   * Initialize participant tracking with real Google Meet integration
+   * Initialize participant tracking with Google Meet integration
    */
   async initialize(meetingId, meetSession) {
     try {
-      console.log('Initializing real Google Meet participant tracking...');
+      console.log('Initializing Google Meet participant tracking...');
       
       // Initialize MeetMediaAPI authentication
       await this.meetMediaAPI.initializeAuth();
       
-      // Set up event handlers for real participant events
+      // Set up event handlers for participant events
       this.setupRealParticipantEventHandlers();
       
-      // Get current participants from the meeting
+      // Get current participants from the meeting (now uses simulated data)
       const currentParticipants = await this.meetMediaAPI.getCurrentParticipants();
       
       // Process each participant
@@ -361,10 +361,10 @@ export class MeetParticipantManager {
       });
       
       this.isInitialized = true;
-      console.log('✅ Real Google Meet participant tracking initialized');
+      console.log('✅ Google Meet participant tracking initialized with simulated data');
       
     } catch (error) {
-      console.error('❌ Failed to initialize real participant tracking:', error);
+      console.error('❌ Failed to initialize participant tracking:', error);
       // Fallback to mock data if real integration fails
       console.log('Falling back to mock participant data...');
       this.simulateParticipants();
@@ -372,24 +372,24 @@ export class MeetParticipantManager {
   }
 
   /**
-   * Set up event handlers for real participant events
+   * Set up event handlers for participant events
    */
   setupRealParticipantEventHandlers() {
     // Handle participant joined events
     this.meetMediaAPI.onParticipantJoined = (participant) => {
-      console.log('Real participant joined:', participant);
+      console.log('Participant joined:', participant);
       this.handleRealParticipantJoined(participant);
     };
 
     // Handle participant left events
     this.meetMediaAPI.onParticipantLeft = (participantId) => {
-      console.log('Real participant left:', participantId);
+      console.log('Participant left:', participantId);
       this.handleRealParticipantLeft(participantId);
     };
 
     // Handle audio data from participants
     this.meetMediaAPI.onAudioData = (audioData) => {
-      console.log('Real audio data received from participant:', audioData.participantName);
+      console.log('Audio data received from participant:', audioData.participantName);
       this.handleRealParticipantAudio(audioData);
     };
 

@@ -42,6 +42,7 @@ export class MeetMediaAPI {
 
   /**
    * Get current participants from the meeting using Meet Add-ons SDK
+   * Note: The Meet Add-ons SDK has limited participant access
    */
   async getCurrentParticipants() {
     try {
@@ -49,15 +50,59 @@ export class MeetMediaAPI {
         throw new Error('Meet session not initialized');
       }
       
-      // Use Meet Add-ons SDK to get participants
-      const participants = await this.meetSession.getParticipants();
-      console.log('Real participants from Meet SDK:', participants);
+      // The Meet Add-ons SDK doesn't have getParticipants() method
+      // We need to use Workspace Events API or simulate participants
+      console.log('⚠️ Meet Add-ons SDK has limited participant access');
+      console.log('📋 Using simulated participants for demonstration');
       
-      return participants || [];
+      // Return simulated participants for now
+      return this.getSimulatedParticipants();
+      
     } catch (error) {
       console.error('Error getting current participants:', error);
       return [];
     }
+  }
+
+  /**
+   * Get simulated participants for demonstration
+   */
+  getSimulatedParticipants() {
+    return [
+      {
+        id: 'user1',
+        name: 'John Doe',
+        email: 'john@example.com',
+        isLocal: true,
+        isSpeaking: false,
+        avatar: '👨‍💼',
+        transcript: '',
+        lastSpoke: null,
+        joinedAt: new Date().toISOString()
+      },
+      {
+        id: 'user2',
+        name: 'Jane Smith',
+        email: 'jane@example.com',
+        isLocal: false,
+        isSpeaking: false,
+        avatar: '👩‍💼',
+        transcript: '',
+        lastSpoke: null,
+        joinedAt: new Date().toISOString()
+      },
+      {
+        id: 'user3',
+        name: 'Bob Johnson',
+        email: 'bob@example.com',
+        isLocal: false,
+        isSpeaking: false,
+        avatar: '👨‍🔬',
+        transcript: '',
+        lastSpoke: null,
+        joinedAt: new Date().toISOString()
+      }
+    ];
   }
 
   /**
@@ -69,11 +114,16 @@ export class MeetMediaAPI {
         throw new Error('Meet session not initialized');
       }
       
-      // Use Meet Add-ons SDK to get meeting info
-      const meetingInfo = await this.meetSession.getMeetingInfo();
-      console.log('Meeting info from Meet SDK:', meetingInfo);
+      // The Meet Add-ons SDK has limited meeting info access
+      console.log('⚠️ Meet Add-ons SDK has limited meeting info access');
       
-      return meetingInfo || {};
+      return {
+        meetingId: this.meetingId || 'simulated-meeting',
+        title: 'Google Meet Session',
+        startTime: new Date().toISOString(),
+        participantCount: this.getSimulatedParticipants().length
+      };
+      
     } catch (error) {
       console.error('Error getting meeting info:', error);
       return {};
@@ -87,21 +137,17 @@ export class MeetMediaAPI {
     try {
       console.log('Starting participant tracking with Meet Add-ons SDK...');
       
-      // Get current participants
-      const participants = await this.getCurrentParticipants();
+      // Get simulated participants
+      const participants = this.getSimulatedParticipants();
       
-      console.log('Participants from Meet SDK:', participants);
+      console.log('Simulated participants:', participants);
       
       // Process each participant
-      if (participants && participants.length > 0) {
-        participants.forEach(participant => {
-          this.handleParticipantJoined(participant);
-        });
-      } else {
-        console.log('No participants found in the meeting');
-      }
+      participants.forEach(participant => {
+        this.handleParticipantJoined(participant);
+      });
       
-      console.log('✅ Participant tracking started with Meet Add-ons SDK');
+      console.log('✅ Participant tracking started with simulated data');
     } catch (error) {
       console.error('Error starting participant tracking:', error);
       throw error;
