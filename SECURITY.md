@@ -35,10 +35,10 @@ SERVICE_ACCOUNT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nYOUR_ACTUAL_PRIVATE_KEY
 CLIENT_ID=your-client-id.apps.googleusercontent.com
 
 # Google Cloud Project Configuration
-CLOUD_PROJECT_NUMBER=your-project-number
+CLOUD_PROJECT_NUMBER=409997382473
 
 # Deepgram API Configuration
-DEEPGRAM_API_KEY=your_deepgram_api_key_here
+DEEPGRAM_API_KEY=306114cbf5e0f315e34cc259af3d16b9fe000992
 
 # Application URLs
 MAIN_STAGE_URL=https://your-domain.com/mainstage.html
