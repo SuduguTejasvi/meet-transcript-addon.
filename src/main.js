@@ -212,7 +212,7 @@ export async function setUpAddon() {
     await initializeSecureCredentials();
     
     const session = await meet.addon.createAddonSession({
-      // Let Meet SDK handle the Cloud Project Number automatically
+      cloudProjectNumber: cloudProjectNumber,
     });
     
     sidePanelClient = await session.createSidePanelClient();
@@ -272,7 +272,7 @@ export async function initializeMainStage() {
     }
     
     const session = await meet.addon.createAddonSession({
-      // Let Meet SDK handle the Cloud Project Number automatically
+      cloudProjectNumber: cloudProjectNumber,
     });
     
     mainStageClient = await session.createMainStageClient();
