@@ -28,15 +28,11 @@ export class DeepgramTranscriber {
    */
   async connect() {
     try {
-      // Create Deepgram WebSocket URL
-      const wsUrl = `wss://api.deepgram.com/v1/listen?model=${this.options.model}&language=${this.options.language}&punctuate=${this.options.punctuate}&profanity_filter=${this.options.profanity_filter}&redact=${this.options.redact}&diarize=${this.options.diarize}&interim_results=true&smart_format=true&encoding=linear16&sample_rate=16000&channels=1`;
+      // Create Deepgram WebSocket URL with API key in the URL
+      const wsUrl = `wss://api.deepgram.com/v1/listen?model=${this.options.model}&language=${this.options.language}&punctuate=${this.options.punctuate}&profanity_filter=${this.options.profanity_filter}&redact=${this.options.redact}&diarize=${this.options.diarize}&interim_results=true&smart_format=true&encoding=linear16&sample_rate=16000&channels=1&token=${this.apiKey}`;
       
       // Create WebSocket connection
-      this.connection = new WebSocket(wsUrl, {
-        headers: {
-          'Authorization': `Token ${this.apiKey}`
-        }
-      });
+      this.connection = new WebSocket(wsUrl);
       
       this.connection.onopen = () => {
         console.log('Deepgram WebSocket connected');
@@ -356,7 +352,7 @@ export class MeetParticipantManager {
       await this.meetMediaAPI.initializeAuth();
       
       // Join the meeting as a media bot
-      await this.meetMediaAPI.joinMeeting(meetingId, meetSession);
+      await this.meetMediaAPI.joinConference(meetingId);
       
       // Set up event handlers for real participant events
       this.setupRealParticipantEventHandlers();
