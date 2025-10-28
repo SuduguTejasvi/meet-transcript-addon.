@@ -71,10 +71,5 @@ module.exports = {
     }
   },
   target: 'web',
-  devtool: 'source-map',
-  // Exclude Node.js modules that can't be bundled for browser
-  externals: {
-    'google-auth-library': 'google-auth-library',
-    'googleapis': 'googleapis'
-  }
+  devtool: 'source-map'
 };
