@@ -67,8 +67,8 @@ export class SecureCredentialManager {
         // For Google Meet Add-ons, we only need the cloud project number and Deepgram API key
         // These can be provided via environment variables or configuration
         this.credentials = {
-          cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER || 'YOUR_CLOUD_PROJECT_NUMBER',
-          deepgramApiKey: process.env.DEEPGRAM_API_KEY || 'YOUR_DEEPGRAM_API_KEY_HERE',
+          cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER || '409997382473',
+          deepgramApiKey: process.env.DEEPGRAM_API_KEY || '306114cbf5e0f315e34cc259af3d16b9fe000992',
           mainStageUrl: process.env.MAIN_STAGE_URL || window.location.origin + '/mainstage.html',
           sidePanelUrl: process.env.SIDE_PANEL_URL || window.location.origin + '/sidepanel.html',
           nodeEnv: 'production',

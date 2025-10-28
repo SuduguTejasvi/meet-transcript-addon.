@@ -5,10 +5,10 @@
 
 export const config = {
   // Google Cloud Project Number (get this from Google Cloud Console)
-  CLOUD_PROJECT_NUMBER: 'YOUR_CLOUD_PROJECT_NUMBER',
+  CLOUD_PROJECT_NUMBER: '409997382473',
   
   // Deepgram API Key (get this from Deepgram dashboard)
-  DEEPGRAM_API_KEY: 'YOUR_DEEPGRAM_API_KEY_HERE',
+  DEEPGRAM_API_KEY: '306114cbf5e0f315e34cc259af3d16b9fe000992',
   
   // URLs for your add-on pages
   MAIN_STAGE_URL: window.location.origin + '/mainstage.html',

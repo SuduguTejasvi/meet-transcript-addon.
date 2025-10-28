@@ -23,7 +23,7 @@ CLIENT_ID=409997382473-4dj4ucqs13cmtbt8p57t74elliqa05ch.apps.googleusercontent.c
 CLOUD_PROJECT_NUMBER=409997382473
 
 # Deepgram API Configuration
-DEEPGRAM_API_KEY=YOUR_DEEPGRAM_API_KEY_HERE
+DEEPGRAM_API_KEY=306114cbf5e0f315e34cc259af3d16b9fe000992
 
 # Application URLs
 MAIN_STAGE_URL=https://sudugutejasvi.github.io/meet-transcript-addon./mainstage.html
