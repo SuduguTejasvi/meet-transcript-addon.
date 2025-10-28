@@ -45,7 +45,7 @@ async function initializeSecureCredentials() {
     const validationErrors = credentialManager.getValidationErrors();
     if (validationErrors.length > 0) {
       console.error('Validation errors:', validationErrors);
-      console.error('Please check your .env file and ensure all required credentials are set.');
+      console.error('Please check your configuration and ensure all required credentials are set.');
     }
     
     throw error;

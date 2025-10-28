@@ -12,6 +12,13 @@ export class SecureCredentialManager {
   }
 
   /**
+   * Check if we're in browser environment
+   */
+  get isBrowserMode() {
+    return typeof window !== 'undefined';
+  }
+
+  /**
    * Initialize credentials from environment variables
    */
   async initialize() {
@@ -21,7 +28,14 @@ export class SecureCredentialManager {
       // Load environment variables
       await this.loadEnvironmentVariables();
       
-      // Validate credentials
+      // In browser environment, skip validation and use platform authentication
+      if (this.isBrowserMode) {
+        console.log('✅ Using Google Meet Add-ons platform authentication');
+        this.isInitialized = true;
+        return true;
+      }
+      
+      // Validate credentials only in Node.js environment
       this.validateCredentials();
       
       // Initialize Google Auth if credentials are valid
@@ -46,9 +60,22 @@ export class SecureCredentialManager {
   async loadEnvironmentVariables() {
     try {
       // Check if we're in a browser environment
-      if (typeof window !== 'undefined') {
+      if (this.isBrowserMode) {
         // Browser environment - credentials should be provided via secure means
         console.warn('⚠️ Running in browser environment - credentials should be provided securely');
+        
+        // For Google Meet Add-ons, we only need the cloud project number and Deepgram API key
+        // These can be provided via environment variables or configuration
+        this.credentials = {
+          cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER || 'YOUR_CLOUD_PROJECT_NUMBER',
+          deepgramApiKey: process.env.DEEPGRAM_API_KEY || 'YOUR_DEEPGRAM_API_KEY_HERE',
+          mainStageUrl: process.env.MAIN_STAGE_URL || window.location.origin + '/mainstage.html',
+          sidePanelUrl: process.env.SIDE_PANEL_URL || window.location.origin + '/sidepanel.html',
+          nodeEnv: 'production',
+          logLevel: 'info'
+        };
+        
+        console.log('📋 Browser environment credentials loaded');
         return;
       }
 
@@ -78,6 +105,12 @@ export class SecureCredentialManager {
   validateCredentials() {
     this.validationErrors = [];
     
+    // Skip validation in browser environment for Google Meet Add-ons
+    if (this.isBrowserMode) {
+      console.log('✅ Skipping credential validation in browser environment');
+      return;
+    }
+    
     const requiredCredentials = [
       { key: 'serviceAccountEmail', name: 'SERVICE_ACCOUNT_EMAIL' },
       { key: 'privateKey', name: 'SERVICE_ACCOUNT_PRIVATE_KEY' },
@@ -88,23 +121,23 @@ export class SecureCredentialManager {
 
     // Check for missing credentials
     requiredCredentials.forEach(cred => {
-      if (!this.credentials[cred.key] || this.credentials[cred.key] === 'YOUR_PRIVATE_KEY_HERE' || this.credentials[cred.key] === 'YOUR_DEEPGRAM_API_KEY_HERE') {
+      if (!this.credentials || !this.credentials[cred.key] || this.credentials[cred.key] === 'YOUR_PRIVATE_KEY_HERE' || this.credentials[cred.key] === 'YOUR_DEEPGRAM_API_KEY_HERE') {
         this.validationErrors.push(`Missing or placeholder value for ${cred.name}`);
       }
     });
 
     // Validate private key format
-    if (this.credentials.privateKey && !this.credentials.privateKey.includes('BEGIN PRIVATE KEY')) {
+    if (this.credentials && this.credentials.privateKey && !this.credentials.privateKey.includes('BEGIN PRIVATE KEY')) {
       this.validationErrors.push('SERVICE_ACCOUNT_PRIVATE_KEY must be in PEM format');
     }
 
     // Validate email format
-    if (this.credentials.serviceAccountEmail && !this.credentials.serviceAccountEmail.includes('@')) {
+    if (this.credentials && this.credentials.serviceAccountEmail && !this.credentials.serviceAccountEmail.includes('@')) {
       this.validationErrors.push('SERVICE_ACCOUNT_EMAIL must be a valid email address');
     }
 
     // Validate client ID format
-    if (this.credentials.clientId && !this.credentials.clientId.includes('.apps.googleusercontent.com')) {
+    if (this.credentials && this.credentials.clientId && !this.credentials.clientId.includes('.apps.googleusercontent.com')) {
       this.validationErrors.push('CLIENT_ID must be a valid Google OAuth client ID');
     }
 
@@ -121,7 +154,7 @@ export class SecureCredentialManager {
   async initializeGoogleAuth() {
     try {
       // Browser environment - use Google Meet Add-ons API directly
-      if (typeof window !== 'undefined') {
+      if (this.isBrowserMode) {
         console.log('✅ Using browser-compatible authentication for Google Meet Add-ons');
         
         // For Google Meet Add-ons, authentication is handled by the platform
@@ -147,6 +180,19 @@ export class SecureCredentialManager {
   getCredentials() {
     if (!this.isInitialized) {
       throw new Error('Credential manager not initialized. Call initialize() first.');
+    }
+    
+    // In browser mode, return only the credentials we have
+    if (this.isBrowserMode) {
+      return {
+        cloudProjectNumber: this.credentials.cloudProjectNumber,
+        deepgramApiKey: this.credentials.deepgramApiKey,
+        mainStageUrl: this.credentials.mainStageUrl,
+        sidePanelUrl: this.credentials.sidePanelUrl,
+        nodeEnv: this.credentials.nodeEnv,
+        logLevel: this.credentials.logLevel,
+        isBrowserMode: true
+      };
     }
     
     if (this.validationErrors.length > 0) {
@@ -193,7 +239,7 @@ export class SecureCredentialManager {
    * Check if credentials are valid
    */
   isValid() {
-    return this.isInitialized && this.validationErrors.length === 0;
+    return this.isInitialized && (this.isBrowserMode || this.validationErrors.length === 0);
   }
 
   /**
@@ -209,6 +255,7 @@ export class SecureCredentialManager {
   logSecurityStatus() {
     console.log('🔒 Security Status:');
     console.log(`  - Credential Manager Initialized: ${this.isInitialized}`);
+    console.log(`  - Browser Mode: ${this.isBrowserMode}`);
     console.log(`  - Validation Errors: ${this.validationErrors.length}`);
     console.log(`  - Environment: ${this.credentials?.nodeEnv || 'unknown'}`);
     console.log(`  - Log Level: ${this.credentials?.logLevel || 'unknown'}`);
