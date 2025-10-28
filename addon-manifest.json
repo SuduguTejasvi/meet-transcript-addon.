@@ -2,16 +2,16 @@
   "addOns": {
     "common": {
       "name": "Live Transcript",
-      "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon//logo.png",
+      "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon.//logo.png",
       "useLocaleFromApp": true
     },
     "meet": {
       "web": {
-        "sidePanelUrl": "https://sudugutejasvi.github.io/meet-transcript-addon//sidepanel.html",
+        "sidePanelUrl": "https://sudugutejasvi.github.io/meet-transcript-addon.//sidepanel.html",
         "supportsScreenSharing": true,
         "addOnOrigins": ["https://sudugutejasvi.github.io"],
-        "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon//meet-logo.png",
-        "darkModeLogoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon//meet-logo-dark.png"
+        "logoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon.//meet-logo.png",
+        "darkModeLogoUrl": "https://sudugutejasvi.github.io/meet-transcript-addon.//meet-logo-dark.png"
       }
     }
   },
