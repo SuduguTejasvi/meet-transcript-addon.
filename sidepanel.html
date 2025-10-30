@@ -418,19 +418,18 @@
 
         async function fetchDeepgramPresignedUrl(key) {
             try {
-                const params = new URLSearchParams({
-                    model: 'nova-2', language: 'en-US', punctuate: 'true', diarize: 'true',
-                    interim_results: 'true', smart_format: 'true', encoding: 'linear16', sample_rate: '16000', channels: '1'
-                });
-                const resp = await fetch(`https://api.deepgram.com/v1/listen?${params.toString()}`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Token ${key}` }
-                });
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                const data = await resp.json();
-                if (data && (data.url || data.websocket_url)) {
-                    return data.url || data.websocket_url;
+                // Prefer local presign server to avoid CORS and keep key secret
+                const params = new URLSearchParams({ model: 'nova-2', language: 'en-US', punctuate: 'true', diarize: 'true', interim_results: 'true', smart_format: 'true', encoding: 'linear16', sample_rate: '16000', channels: '1' });
+                let resp = await fetch(`http://localhost:8787/presign?${params.toString()}`, { headers: { 'Authorization': `Token ${key}` } });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data && (data.url || data.websocket_url)) return data.url || data.websocket_url;
                 }
+                // Fallback: call Deepgram directly (may hit CORS depending on account)
+                resp = await fetch(`https://api.deepgram.com/v1/listen?${params.toString()}`, { method: 'POST', headers: { 'Authorization': `Token ${key}` } });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data2 = await resp.json();
+                if (data2 && (data2.url || data2.websocket_url)) return data2.url || data2.websocket_url;
                 throw new Error('No pre-signed URL in response');
             } catch (e) {
                 throw e;
