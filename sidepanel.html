@@ -278,6 +278,17 @@
             </button>
         </div>
 
+        <div class="controls" id="browser-audio-card">
+            <h3 style="margin-bottom:10px; font-size:16px; color:#1a73e8;">Browser Audio Capture (no Meet API)</h3>
+            <label style="display:block; font-size:13px; color:#5f6368; margin-bottom:6px;">Deepgram API Key</label>
+            <input id="dgKeyPanel" type="password" placeholder="dg_xxx..." style="width:100%; padding:10px; border:1px solid #dadce0; border-radius:8px; margin-bottom:10px;">
+            <button id="startMicPanel" class="btn btn-success">🎙️ Start Mic Transcription</button>
+            <button id="startTabPanel" class="btn btn-primary">🪟 Start Current Tab Transcription</button>
+            <button id="stopAllPanel" class="btn btn-danger" disabled>⏹️ Stop</button>
+            <div id="dgOutPanel" class="status-message info" style="display:block; margin-top:10px; min-height:20px;"></div>
+            <p style="font-size:12px; color:#5f6368; margin-top:8px;">For tab audio, choose the Meet tab and enable "Share tab audio".</p>
+        </div>
+
         <div class="participants-card">
             <h3>Participants</h3>
             <div id="participants-list">
@@ -374,6 +385,117 @@
 
         // Start simulation after a delay
         setTimeout(simulateParticipants, 2000);
+
+        // ---------------- Browser Audio Capture (Deepgram) ----------------
+        const dg = {
+            ws: null,
+            ctx: null,
+            stream: null,
+            src: null,
+            proc: null,
+            outEl: document.getElementById('dgOutPanel'),
+            keyEl: document.getElementById('dgKeyPanel'),
+            startMicBtn: document.getElementById('startMicPanel'),
+            startTabBtn: document.getElementById('startTabPanel'),
+            stopBtn: document.getElementById('stopAllPanel')
+        };
+
+        function floatTo16BitPCM(float32Array) {
+            const int16 = new Int16Array(float32Array.length);
+            for (let i = 0; i < float32Array.length; i++) {
+                const s = Math.max(-1, Math.min(1, float32Array[i]));
+                int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return int16;
+        }
+
+        function setPanelMsg(msg, type = 'info') {
+            if (!dg.outEl) return;
+            dg.outEl.textContent = msg || '';
+            dg.outEl.className = `status-message ${type}`;
+            dg.outEl.style.display = 'block';
+        }
+
+        function openDeepgram(key) {
+            return new Promise((resolve, reject) => {
+                const url = 'wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&punctuate=true&diarize=true&interim_results=true&smart_format=true&encoding=linear16&sample_rate=16000&channels=1';
+                dg.ws = new WebSocket(url);
+                dg.ws.addEventListener('open', () => {
+                    try { dg.ws.send(JSON.stringify({ type: 'authorization', token: key })); } catch(_) {}
+                    resolve();
+                });
+                dg.ws.addEventListener('error', (e) => reject(e));
+                dg.ws.addEventListener('close', () => setPanelMsg('Deepgram socket closed', 'info'));
+                dg.ws.addEventListener('message', (evt) => {
+                    try {
+                        const data = JSON.parse(evt.data);
+                        if (data.channel && data.channel.alternatives && data.channel.alternatives[0]) {
+                            const alt = data.channel.alternatives[0];
+                            if (alt.transcript) setPanelMsg(alt.transcript, 'info');
+                        }
+                    } catch(_) {}
+                });
+            });
+        }
+
+        async function startCapture(kind) {
+            const key = (dg.keyEl && dg.keyEl.value || '').trim();
+            if (!key) { setPanelMsg('Please enter Deepgram API key', 'error'); return; }
+            stopCapture();
+            setPanelMsg('Connecting to Deepgram…', 'info');
+            try { await openDeepgram(key); } catch (e) { setPanelMsg('Deepgram error: ' + (e.message || e), 'error'); return; }
+
+            try {
+                if (kind === 'mic') {
+                    dg.stream = await navigator.mediaDevices.getUserMedia({
+                        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                    });
+                } else {
+                    const ds = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+                    const v = ds.getVideoTracks()[0]; if (v) v.stop();
+                    dg.stream = new MediaStream(ds.getAudioTracks());
+                }
+            } catch (e) {
+                setPanelMsg('Media error: ' + (e.message || e), 'error');
+                return;
+            }
+
+            try {
+                dg.ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                dg.src = dg.ctx.createMediaStreamSource(dg.stream);
+                dg.proc = dg.ctx.createScriptProcessor(4096, 1, 1);
+                dg.proc.onaudioprocess = (evt) => {
+                    if (!dg.ws || dg.ws.readyState !== 1) return;
+                    const input = evt.inputBuffer.getChannelData(0);
+                    dg.ws.send(floatTo16BitPCM(input));
+                };
+                dg.src.connect(dg.proc);
+                dg.proc.connect(dg.ctx.destination);
+                if (dg.stopBtn) dg.stopBtn.disabled = false;
+                if (dg.startMicBtn) dg.startMicBtn.disabled = true;
+                if (dg.startTabBtn) dg.startTabBtn.disabled = true;
+                setPanelMsg('Streaming audio…', 'success');
+            } catch (e) {
+                setPanelMsg('Audio pipeline error: ' + (e.message || e), 'error');
+                stopCapture();
+            }
+        }
+
+        function stopCapture() {
+            try { if (dg.proc) dg.proc.disconnect(); } catch(_) {}
+            try { if (dg.src) dg.src.disconnect(); } catch(_) {}
+            try { if (dg.ctx) dg.ctx.close(); } catch(_) {}
+            dg.proc = null; dg.src = null; dg.ctx = null;
+            if (dg.stream) { dg.stream.getTracks().forEach(t => { try { t.stop(); } catch(_) {} }); dg.stream = null; }
+            if (dg.ws) { try { dg.ws.close(); } catch(_) {} dg.ws = null; }
+            if (dg.stopBtn) dg.stopBtn.disabled = true;
+            if (dg.startMicBtn) dg.startMicBtn.disabled = false;
+            if (dg.startTabBtn) dg.startTabBtn.disabled = false;
+        }
+
+        if (dg.startMicBtn) dg.startMicBtn.addEventListener('click', () => startCapture('mic'));
+        if (dg.startTabBtn) dg.startTabBtn.addEventListener('click', () => startCapture('tab'));
+        if (dg.stopBtn) dg.stopBtn.addEventListener('click', () => { setPanelMsg('Stopping…', 'info'); stopCapture(); });
     </script>
 </body>
 </html>
