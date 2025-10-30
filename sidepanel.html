@@ -416,11 +416,30 @@
             dg.outEl.style.display = 'block';
         }
 
-        function openDeepgram(key) {
+        async function fetchDeepgramPresignedUrl(key) {
+            try {
+                const params = new URLSearchParams({
+                    model: 'nova-2', language: 'en-US', punctuate: 'true', diarize: 'true',
+                    interim_results: 'true', smart_format: 'true', encoding: 'linear16', sample_rate: '16000', channels: '1'
+                });
+                const resp = await fetch(`https://api.deepgram.com/v1/listen?${params.toString()}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Token ${key}` }
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                if (data && (data.url || data.websocket_url)) {
+                    return data.url || data.websocket_url;
+                }
+                throw new Error('No pre-signed URL in response');
+            } catch (e) {
+                throw e;
+            }
+        }
+
+        function openDeepgramWithUrl(wsUrl) {
             return new Promise((resolve, reject) => {
-                const base = 'wss://api.deepgram.com/v1/listen';
-                const url = `${base}?model=nova-2&language=en-US&punctuate=true&diarize=true&interim_results=true&smart_format=true&encoding=linear16&sample_rate=16000&channels=1&token=${encodeURIComponent(key)}`;
-                dg.ws = new WebSocket(url);
+                dg.ws = new WebSocket(wsUrl);
                 dg.ws.addEventListener('open', () => { resolve(); });
                 dg.ws.addEventListener('error', (e) => reject(e));
                 dg.ws.addEventListener('close', () => setPanelMsg('Deepgram socket closed', 'info'));
@@ -434,6 +453,19 @@
                     } catch(_) {}
                 });
             });
+        }
+
+        async function openDeepgram(key) {
+            // Prefer pre-signed URL flow (works in browsers). Fallback to token query only if presign fails.
+            try {
+                const url = await fetchDeepgramPresignedUrl(key);
+                return await openDeepgramWithUrl(url);
+            } catch (e) {
+                // Fallback: token query (may be rejected for permanent keys)
+                const base = 'wss://api.deepgram.com/v1/listen';
+                const url = `${base}?model=nova-2&language=en-US&punctuate=true&diarize=true&interim_results=true&smart_format=true&encoding=linear16&sample_rate=16000&channels=1&token=${encodeURIComponent(key)}`;
+                return await openDeepgramWithUrl(url);
+            }
         }
 
         async function startCapture(kind) {
