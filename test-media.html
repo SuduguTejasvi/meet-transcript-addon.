@@ -1,0 +1,157 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Meet Media API Test</title>
+<body style="font-family: Arial, sans-serif; padding: 16px;">
+  <h2>Meet Media API Test (Developer Preview)</h2>
+
+  <div style="margin-bottom: 10px;">
+    <label>OAuth Web Client ID:</label><br />
+    <input id="clientId" style="width: 520px;" placeholder="YOUR_CLIENT_ID.apps.googleusercontent.com" />
+  </div>
+
+  <div style="margin-bottom: 10px;">
+    <label>Meet space name (spaces/…):</label><br />
+    <input id="spaceName" style="width: 520px;" placeholder="spaces/AAAA-BBBB-CCC" />
+  </div>
+
+  <div style="margin-bottom: 10px;">
+    <label>Scopes:</label><br />
+    <input style="width: 520px;" disabled
+      value="https://www.googleapis.com/auth/meetings.conference.media.readonly" />
+  </div>
+
+  <button id="authBtn">Authorize</button>
+  <button id="connectBtn" disabled>Connect Active Conference</button>
+  <button id="hangupBtn" disabled>Hang up</button>
+
+  <pre id="log" style="margin-top:16px; background:#f7f7f7; padding:12px; height:300px; overflow:auto;"></pre>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    const SCOPES = ['https://www.googleapis.com/auth/meetings.conference.media.readonly'];
+    const LOG = document.getElementById('log');
+    const authBtn = document.getElementById('authBtn');
+    const connectBtn = document.getElementById('connectBtn');
+    const hangupBtn = document.getElementById('hangupBtn');
+    let accessToken = null;
+    let pc = null;
+    let sessionControl = null;
+    let mediaStats = null;
+
+    function log() {
+      LOG.textContent += Array.from(arguments).join(' ') + '\n';
+      LOG.scrollTop = LOG.scrollHeight;
+    }
+
+    function getField(id) { return document.getElementById(id).value.trim(); }
+
+    function initPeerConnection() {
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
+      });
+
+      for (let i = 0; i < 3; i++) {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+      }
+      pc.addTransceiver('video', { direction: 'recvonly' });
+
+      sessionControl = pc.createDataChannel('session-control', { ordered: true });
+      mediaStats = pc.createDataChannel('media-stats', { ordered: true });
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          // Trickle ICE; Meet supports trickle.
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        log('PC state:', pc.connectionState);
+      };
+
+      pc.ontrack = (e) => {
+        log('ontrack:', e.track.kind, 'streams:', e.streams.length);
+      };
+    }
+
+    async function authorize() {
+      return new Promise((resolve, reject) => {
+        const clientId = getField('clientId');
+        if (!clientId) return reject(new Error('Missing OAuth Web Client ID'));
+        google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: SCOPES.join(' '),
+          callback: (resp) => {
+            if (resp && resp.access_token) {
+              accessToken = resp.access_token;
+              log('Authorized. Access token acquired.');
+              connectBtn.disabled = false;
+              resolve();
+            } else {
+              reject(new Error('Failed to get access token'));
+            }
+          },
+          error_callback: (err) => reject(err),
+        }).requestAccessToken({ prompt: 'consent' });
+      });
+    }
+
+    async function connectActiveConference() {
+      const spaceName = getField('spaceName');
+      if (!spaceName) {
+        log('Please enter a valid Meet space name (spaces/...)');
+        return;
+      }
+
+      initPeerConnection();
+
+      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+      await pc.setLocalDescription(offer);
+      log('Local SDP offer created. Sending to Meet…');
+
+      const url = `https://meet.googleapis.com/v2beta/${encodeURIComponent(spaceName)}:connectActiveConference`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ offer: offer.sdp })
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        log('connectActiveConference failed:', res.status, txt);
+        return;
+      }
+
+      const data = await res.json();
+      if (!data || !data.answer) {
+        log('No SDP answer in response.');
+        return;
+      }
+
+      await pc.setRemoteDescription({ type: 'answer', sdp: data.answer });
+      log('Remote SDP answer set. ICE connecting…');
+      hangupBtn.disabled = false;
+    }
+
+    async function hangup() {
+      if (pc) {
+        try { pc.getSenders().forEach(s => { try { s.track && s.track.stop(); } catch (_) {} }); } catch (_) {}
+        try { pc.close(); } catch (_) {}
+        pc = null;
+      }
+      hangupBtn.disabled = true;
+      log('PeerConnection closed.');
+    }
+
+    document.getElementById('authBtn').addEventListener('click', async () => {
+      document.getElementById('authBtn').disabled = true;
+      try { await authorize(); } catch (e) { log('Auth error:', e.message); document.getElementById('authBtn').disabled = false; }
+    });
+    document.getElementById('connectBtn').addEventListener('click', () => connectActiveConference());
+    document.getElementById('hangupBtn').addEventListener('click', () => hangup());
+  </script>
+</body>
+
+

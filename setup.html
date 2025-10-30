@@ -214,6 +214,167 @@
             <h2>✅ Setup Complete!</h2>
             <p>Once you've completed these steps, you should be able to use Live Transcript in your Google Meet sessions. Enjoy real-time transcription!</p>
         </div>
+
+        <div class="step">
+            <h3>Optional: Browser Audio Capture (no Meet API)</h3>
+            <p>Capture audio directly in your browser without the Google Meet API. You can stream from your microphone or from the current tab (share tab audio) and get real‑time transcripts.</p>
+            <div style="margin:12px 0;">
+                <label><strong>Deepgram API Key</strong></label><br>
+                <input id="dgKey" type="password" placeholder="dg_xxx..." style="width:100%;max-width:520px;">
+            </div>
+            <div style="margin:12px 0; display:flex; gap:8px; flex-wrap:wrap;">
+                <button id="startMic">Start Mic Transcription</button>
+                <button id="startTab">Start Current Tab Transcription</button>
+                <button id="stopAll" disabled>Stop</button>
+            </div>
+            <pre id="dgLog" class="code" style="height:260px; overflow:auto; white-space:pre-wrap;"></pre>
+            <div id="dgOut" class="code" style="margin-top:10px; min-height:60px;"></div>
+            <p style="font-size:12px;color:#666; margin-top:8px;">Note: For tab audio, your browser will prompt you to "Share this tab" and you must enable "Share tab audio". This captures audio locally in your browser and does not join the meeting as a bot.</p>
+        </div>
     </div>
 </body>
+<script>
+(function() {
+    const logEl = document.getElementById('dgLog');
+    const outEl = document.getElementById('dgOut');
+    const startMicBtn = document.getElementById('startMic');
+    const startTabBtn = document.getElementById('startTab');
+    const stopBtn = document.getElementById('stopAll');
+    const keyEl = document.getElementById('dgKey');
+
+    let ws = null;
+    let audioContext = null;
+    let mediaStream = null;
+    let processor = null;
+    let sourceNode = null;
+
+    function log() {
+        const msg = Array.from(arguments).join(' ');
+        logEl.textContent += msg + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function floatTo16BitPCM(float32Array) {
+        const int16 = new Int16Array(float32Array.length);
+        for (let i = 0; i < float32Array.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32Array[i]));
+            int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        return int16;
+    }
+
+    function openDeepgram(key) {
+        return new Promise((resolve, reject) => {
+            const url = 'wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&punctuate=true&diarize=true&interim_results=true&smart_format=true&encoding=linear16&sample_rate=16000&channels=1';
+            ws = new WebSocket(url, []);
+            // Deepgram expects the key in the Authorization header; browsers can't set headers for WS.
+            // Deepgram also supports the "token" query param for browser WS.
+            // If your key is a short-lived token, append as ?token=... Instead, we will send an auth message.
+            ws.addEventListener('open', () => {
+                try {
+                    ws.send(JSON.stringify({ type: 'authorization', token: key }));
+                } catch(e) {}
+                resolve();
+            });
+            ws.addEventListener('error', (e) => reject(e));
+            ws.addEventListener('close', () => log('Deepgram socket closed'));
+            ws.addEventListener('message', (evt) => {
+                try {
+                    const data = JSON.parse(evt.data);
+                    if (data.channel && data.channel.alternatives && data.channel.alternatives[0]) {
+                        const alt = data.channel.alternatives[0];
+                        if (alt.transcript) {
+                            outEl.textContent = alt.transcript;
+                        }
+                    }
+                } catch (_) {}
+            });
+        });
+    }
+
+    async function startCapture(kind) {
+        const key = keyEl.value.trim();
+        if (!key) { log('Please enter Deepgram API key'); return; }
+        stopCapture();
+        log('Opening Deepgram…');
+        try {
+            await openDeepgram(key);
+        } catch (e) {
+            log('Failed to connect to Deepgram:', e.message || e);
+            return;
+        }
+
+        try {
+            if (kind === 'mic') {
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                log('Mic stream started');
+            } else {
+                const ds = await navigator.mediaDevices.getDisplayMedia({
+                    audio: true,
+                    video: true
+                });
+                // Prefer the audio track, we don't need to render video
+                const v = ds.getVideoTracks()[0];
+                if (v) v.stop();
+                mediaStream = new MediaStream(ds.getAudioTracks());
+                log('Tab audio stream started (ensure "Share tab audio" was enabled)');
+            }
+        } catch (e) {
+            log('Failed to start media:', e.message || e);
+            return;
+        }
+
+        try {
+            // Use 16kHz context for direct linear16 streaming
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            sourceNode = audioContext.createMediaStreamSource(mediaStream);
+            processor = audioContext.createScriptProcessor(4096, 1, 1);
+            processor.onaudioprocess = (evt) => {
+                if (!ws || ws.readyState !== 1) return;
+                const input = evt.inputBuffer.getChannelData(0);
+                const int16 = floatTo16BitPCM(input);
+                ws.send(int16);
+            };
+            sourceNode.connect(processor);
+            processor.connect(audioContext.destination);
+            stopBtn.disabled = false;
+            startMicBtn.disabled = true;
+            startTabBtn.disabled = true;
+            log('Streaming audio to Deepgram…');
+        } catch (e) {
+            log('Audio pipeline error:', e.message || e);
+            stopCapture();
+        }
+    }
+
+    function stopCapture() {
+        try { if (processor) processor.disconnect(); } catch(_) {}
+        try { if (sourceNode) sourceNode.disconnect(); } catch(_) {}
+        try { if (audioContext) audioContext.close(); } catch(_) {}
+        processor = null; sourceNode = null; audioContext = null;
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(t => { try { t.stop(); } catch(_) {} });
+            mediaStream = null;
+        }
+        if (ws) {
+            try { ws.close(); } catch(_) {}
+            ws = null;
+        }
+        stopBtn.disabled = true;
+        startMicBtn.disabled = false;
+        startTabBtn.disabled = false;
+    }
+
+    startMicBtn.addEventListener('click', () => startCapture('mic'));
+    startTabBtn.addEventListener('click', () => startCapture('tab'));
+    stopBtn.addEventListener('click', () => { log('Stopping…'); stopCapture(); });
+})();
+</script>
 </html>
