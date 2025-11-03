@@ -173,8 +173,11 @@ function initializeAttendeeIntegration() {
       return;
     }
     
-    // Create Attendee.ai integration instance
-    attendeeIntegration = new AttendeeIntegration(attendeeApiKey, credentials);
+    // Create Attendee.ai integration instance with Meet clients for better URL detection
+    attendeeIntegration = new AttendeeIntegration(attendeeApiKey, credentials, {
+      sidePanelClient: sidePanelClient,
+      mainStageClient: mainStageClient
+    });
     
     // Set up event handlers
     attendeeIntegration.onTranscriptUpdate = (entry) => {
@@ -291,10 +294,7 @@ export async function setUpAddon() {
       throw new Error('Failed to initialize Meet Media API');
     }
     
-    // Initialize Attendee.ai integration for live transcripts
-    initializeAttendeeIntegration();
-    
-    // Set up event listeners
+    // Set up event listeners first (so sidePanelClient is available)
     const startActivityBtn = document.getElementById('start-activity');
     const startTranscriptBtn = document.getElementById('start-transcript');
     const stopTranscriptBtn = document.getElementById('stop-transcript');
@@ -320,6 +320,9 @@ export async function setUpAddon() {
     if (stopTranscriptBtn) {
       stopTranscriptBtn.addEventListener('click', stopTranscript);
     }
+    
+    // Initialize Attendee.ai integration after clients are set up
+    initializeAttendeeIntegration();
     
     console.log('Add-on initialized successfully');
     showStatus('Add-on loaded successfully!', 'success');

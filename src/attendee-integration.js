@@ -5,9 +5,11 @@
  */
 
 export class AttendeeIntegration {
-  constructor(apiKey, credentials) {
+  constructor(apiKey, credentials, meetClients = {}) {
     this.apiKey = apiKey;
     this.credentials = credentials;
+    this.sidePanelClient = meetClients.sidePanelClient || null;
+    this.mainStageClient = meetClients.mainStageClient || null;
     this.botId = null;
     this.meetingUrl = null;
     this.isActive = false;
@@ -31,16 +33,53 @@ export class AttendeeIntegration {
    */
   async getMeetingUrl() {
     try {
-      // Try to get meeting URL from various sources
+      console.log('Attempting to detect meeting URL...');
       
-      // Method 1: From browser URL
-      const currentUrl = window.location.href;
-      if (currentUrl.includes('meet.google.com')) {
-        // Extract meeting code from URL like: https://meet.google.com/abc-defg-hij
-        const match = currentUrl.match(/meet\.google\.com\/([a-z-]+)/i);
-        if (match) {
-          const meetingCode = match[1];
-          return `https://meet.google.com/${meetingCode}`;
+      // Method 1: Try using sidePanelClient or mainStageClient to get meeting info
+      if (this.sidePanelClient) {
+        try {
+          const meetingInfo = await this.sidePanelClient.getMeetingInfo?.();
+          console.log('Meeting info from sidePanelClient:', meetingInfo);
+          if (meetingInfo?.meetingUrl) {
+            console.log('✅ Found meeting URL from sidePanelClient:', meetingInfo.meetingUrl);
+            return meetingInfo.meetingUrl;
+          }
+          if (meetingInfo?.meetingCode) {
+            const url = `https://meet.google.com/${meetingInfo.meetingCode}`;
+            console.log('✅ Constructed meeting URL from meetingCode:', url);
+            return url;
+          }
+          if (meetingInfo?.meetingId) {
+            // Try to construct URL from meeting ID
+            const url = `https://meet.google.com/${meetingInfo.meetingId}`;
+            console.log('✅ Constructed meeting URL from meetingId:', url);
+            return url;
+          }
+        } catch (err) {
+          console.warn('Could not get meeting URL from sidePanelClient:', err);
+        }
+      }
+      
+      if (this.mainStageClient) {
+        try {
+          const meetingInfo = await this.mainStageClient.getMeetingInfo?.();
+          console.log('Meeting info from mainStageClient:', meetingInfo);
+          if (meetingInfo?.meetingUrl) {
+            console.log('✅ Found meeting URL from mainStageClient:', meetingInfo.meetingUrl);
+            return meetingInfo.meetingUrl;
+          }
+          if (meetingInfo?.meetingCode) {
+            const url = `https://meet.google.com/${meetingInfo.meetingCode}`;
+            console.log('✅ Constructed meeting URL from meetingCode:', url);
+            return url;
+          }
+          if (meetingInfo?.meetingId) {
+            const url = `https://meet.google.com/${meetingInfo.meetingId}`;
+            console.log('✅ Constructed meeting URL from meetingId:', url);
+            return url;
+          }
+        } catch (err) {
+          console.warn('Could not get meeting URL from mainStageClient:', err);
         }
       }
       
@@ -48,26 +87,99 @@ export class AttendeeIntegration {
       if (this.credentials?.meetSession) {
         try {
           const meetingInfo = await this.credentials.meetSession.getMeetingInfo?.();
+          console.log('Meeting info from meetSession:', meetingInfo);
           if (meetingInfo?.meetingUrl) {
+            console.log('✅ Found meeting URL from meetSession:', meetingInfo.meetingUrl);
             return meetingInfo.meetingUrl;
           }
           if (meetingInfo?.meetingCode) {
-            return `https://meet.google.com/${meetingInfo.meetingCode}`;
+            const url = `https://meet.google.com/${meetingInfo.meetingCode}`;
+            console.log('✅ Constructed meeting URL from meetingCode:', url);
+            return url;
+          }
+          if (meetingInfo?.meetingId) {
+            const url = `https://meet.google.com/${meetingInfo.meetingId}`;
+            console.log('✅ Constructed meeting URL from meetingId:', url);
+            return url;
           }
         } catch (err) {
           console.warn('Could not get meeting URL from Meet session:', err);
         }
       }
       
-      // Method 3: Try to find in DOM
-      const meetLinks = document.querySelectorAll('a[href*="meet.google.com"]');
-      if (meetLinks.length > 0) {
-        const href = meetLinks[0].href;
-        return href.split('?')[0]; // Remove query params
+      // Method 3: Try to access parent window URL (if in iframe)
+      try {
+        if (window.parent && window.parent !== window) {
+          const parentUrl = window.parent.location.href;
+          console.log('Parent window URL:', parentUrl);
+          if (parentUrl.includes('meet.google.com')) {
+            const match = parentUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+            if (match && match[1] && match[1].length > 3) {
+              const meetingCode = match[1];
+              const url = `https://meet.google.com/${meetingCode}`;
+              console.log('✅ Found meeting URL from parent window:', url);
+              return url;
+            }
+          }
+        }
+      } catch (err) {
+        // Cross-origin restrictions might prevent this
+        console.warn('Could not access parent window (cross-origin):', err.message);
       }
       
-      // Fallback: Return null and let user provide it
-      console.warn('Could not automatically detect meeting URL');
+      // Method 4: Try document.referrer
+      try {
+        const referrer = document.referrer;
+        if (referrer && referrer.includes('meet.google.com')) {
+          const match = referrer.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+          if (match && match[1] && match[1].length > 3) {
+            const meetingCode = match[1];
+            const url = `https://meet.google.com/${meetingCode}`;
+            console.log('✅ Found meeting URL from referrer:', url);
+            return url;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not get meeting URL from referrer:', err);
+      }
+      
+      // Method 5: From current browser URL
+      const currentUrl = window.location.href;
+      if (currentUrl.includes('meet.google.com')) {
+        const match = currentUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+        if (match && match[1] && match[1].length > 3) {
+          const meetingCode = match[1];
+          const url = `https://meet.google.com/${meetingCode}`;
+          console.log('✅ Found meeting URL from current URL:', url);
+          return url;
+        }
+      }
+      
+      // Method 6: Try to find in DOM
+      const meetLinks = document.querySelectorAll('a[href*="meet.google.com"]');
+      if (meetLinks.length > 0) {
+        for (const link of meetLinks) {
+          const href = link.href;
+          const match = href.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+          if (match && match[1] && match[1].length > 3) {
+            const url = `https://meet.google.com/${match[1]}`;
+            console.log('✅ Found meeting URL from DOM link:', url);
+            return url;
+          }
+        }
+      }
+      
+      // Fallback: Try to extract from URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const meetingCode = urlParams.get('meetingCode') || urlParams.get('meeting') || urlParams.get('code');
+      if (meetingCode) {
+        const url = `https://meet.google.com/${meetingCode}`;
+        console.log('✅ Found meeting URL from URL params:', url);
+        return url;
+      }
+      
+      // Final fallback: Return null
+      console.warn('⚠️ Could not automatically detect meeting URL from any source');
       return null;
     } catch (error) {
       console.error('Error getting meeting URL:', error);
@@ -89,7 +201,9 @@ export class AttendeeIntegration {
       if (!meetingUrl) {
         meetingUrl = await this.getMeetingUrl();
         if (!meetingUrl) {
-          throw new Error('Could not detect meeting URL. Please provide it manually.');
+          // As a last resort, try to prompt for manual entry or use a fallback
+          // For now, we'll throw an error with helpful instructions
+          throw new Error('Could not automatically detect meeting URL. The add-on needs access to the Google Meet URL. Please ensure you are running this from within a Google Meet session, or contact support if the issue persists.');
         }
       }
 
