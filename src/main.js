@@ -1,12 +1,14 @@
 import { meet } from '@googleworkspace/meet-addons/meet.addons';
 import { DeepgramTranscriber, AudioCapture, TranscriptionManager } from './deepgram-integration.js';
 import { MeetMediaAPI } from './meet-media-api.js';
+import { AttendeeIntegration } from './attendee-integration.js';
 import { credentialManager } from './secure-credential-manager.js';
 
 // Initialize secure credential manager
 let credentials = null;
 let cloudProjectNumber = null;
 let deepgramApiKey = null;
+let attendeeApiKey = null;
 let mainStageUrl = null;
 
 let sidePanelClient;
@@ -15,6 +17,7 @@ let participants = new Map();
 let transcriptContainer;
 let isTranscribing = false;
 let transcriptionManager = null;
+let attendeeIntegration = null;
 let meetMediaAPI = null;
 
 /**
@@ -31,6 +34,7 @@ async function initializeSecureCredentials() {
     credentials = credentialManager.getCredentials();
     cloudProjectNumber = credentials.cloudProjectNumber;
     deepgramApiKey = credentials.deepgramApiKey;
+    attendeeApiKey = credentials.attendeeApiKey;
     mainStageUrl = credentials.mainStageUrl;
     
     // Log security status (without exposing sensitive data)
@@ -156,63 +160,114 @@ function sendAudioToDeepgram(speakerAudioData) {
 }
 
 /**
- * Initialize Deepgram client for real-time transcription
+ * Initialize Attendee.ai integration for live transcription
  */
-function initializeDeepgram() {
-  console.log('Initializing Deepgram client...');
+function initializeAttendeeIntegration() {
+  console.log('Initializing Attendee.ai integration...');
   
   try {
     // Ensure credentials are initialized
-    if (!deepgramApiKey) {
-      throw new Error('Deepgram API key not initialized. Call initializeSecureCredentials() first.');
+    if (!attendeeApiKey) {
+      console.warn('Attendee.ai API key not found. Please set ATTENDEE_API_KEY environment variable.');
+      showStatus('Attendee.ai API key not configured', 'error');
+      return;
     }
     
-    // Create transcription manager with Deepgram API key
-    transcriptionManager = new TranscriptionManager(deepgramApiKey, credentials);
+    // Create Attendee.ai integration instance
+    attendeeIntegration = new AttendeeIntegration(attendeeApiKey, credentials);
     
-    // Override the transcript handler to include speaker information
-    transcriptionManager.deepgram.onTranscriptReceived = (transcriptData) => {
-      handleTranscriptUpdate(transcriptData);
+    // Set up event handlers
+    attendeeIntegration.onTranscriptUpdate = (entry) => {
+      handleAttendeeTranscriptUpdate(entry);
     };
     
-    console.log('Deepgram client initialized successfully');
+    attendeeIntegration.onBotStatusChange = (status) => {
+      console.log('Bot status changed:', status);
+      if (status.status === 'created') {
+        showStatus('Attendee.ai bot created successfully', 'success');
+      } else if (status.status === 'active') {
+        showStatus('Live transcription active', 'success');
+      } else if (status.status === 'stopped') {
+        showStatus('Transcription stopped', 'info');
+      }
+    };
+    
+    attendeeIntegration.onError = (error) => {
+      console.error('Attendee.ai error:', error);
+      showStatus('Attendee.ai error: ' + error.message, 'error');
+    };
+    
+    console.log('✅ Attendee.ai integration initialized successfully');
   } catch (error) {
-    console.error('Error initializing Deepgram:', error);
-    showStatus('Error initializing Deepgram: ' + error.message, 'error');
+    console.error('Error initializing Attendee.ai:', error);
+    showStatus('Error initializing Attendee.ai: ' + error.message, 'error');
   }
 }
 
 /**
- * Handle real-time transcript updates from Deepgram
+ * Handle real-time transcript updates from Attendee.ai
  */
-function handleTranscriptUpdate(transcriptData) {
-  const { transcript, confidence, speakerId, isFinal } = transcriptData;
+function handleAttendeeTranscriptUpdate(entry) {
+  const { speakerName, transcription, timestamp, duration } = entry;
   
-  if (transcript && isFinal) {
-    // Use current speaker context from Meet Media API
-    const currentSpeaker = transcriptionManager.currentSpeaker;
+  if (transcription && transcription.trim()) {
+    // Find or create participant by speaker name
+    let participant = null;
     
-    if (currentSpeaker) {
-      const participant = participants.get(currentSpeaker.id);
-      
-      if (participant) {
-        // Add new transcript with speaker name
-        participant.transcript += (participant.transcript ? ' ' : '') + transcript;
-        participant.isSpeaking = true;
-        participant.lastSpoke = new Date().toLocaleTimeString();
-        participant.confidence = confidence;
-        
-        updateParticipantDisplay();
-        
-        // Stop speaking indicator after 3 seconds
-        setTimeout(() => {
-          participant.isSpeaking = false;
-          updateParticipantDisplay();
-        }, 3000);
-        
-        console.log(`${currentSpeaker.name}: ${transcript}`);
+    // Try to find existing participant by name
+    for (const [id, p] of participants.entries()) {
+      if (p.name === speakerName || p.name.toLowerCase() === speakerName.toLowerCase()) {
+        participant = p;
+        break;
       }
     }
+    
+    // If participant not found, create a new one
+    if (!participant) {
+      participant = {
+        id: `speaker_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        name: speakerName,
+        email: '',
+        isLocal: false,
+        isSpeaking: true,
+        avatar: '👤',
+        transcript: '',
+        lastSpoke: null,
+        joinedAt: new Date().toISOString(),
+        entries: [] // Store individual transcript entries
+      };
+      participants.set(participant.id, participant);
+    }
+    
+    // Add new transcript entry
+    const transcriptEntry = {
+      text: transcription,
+      timestamp: timestamp,
+      duration: duration,
+      timestampMs: Date.now()
+    };
+    
+    if (!participant.entries) {
+      participant.entries = [];
+    }
+    participant.entries.push(transcriptEntry);
+    
+    // Update participant transcript (append new text)
+    participant.transcript += (participant.transcript ? ' ' : '') + transcription;
+    participant.isSpeaking = true;
+    participant.lastSpoke = new Date().toLocaleTimeString();
+    
+    updateParticipantDisplay();
+    
+    // Stop speaking indicator after 3 seconds
+    setTimeout(() => {
+      if (participant) {
+        participant.isSpeaking = false;
+        updateParticipantDisplay();
+      }
+    }, 3000);
+    
+    console.log(`${speakerName}: ${transcription}`);
   }
 }
 
@@ -236,8 +291,8 @@ export async function setUpAddon() {
       throw new Error('Failed to initialize Meet Media API');
     }
     
-    // Initialize Deepgram
-    initializeDeepgram();
+    // Initialize Attendee.ai integration for live transcripts
+    initializeAttendeeIntegration();
     
     // Set up event listeners
     const startActivityBtn = document.getElementById('start-activity');
@@ -558,12 +613,17 @@ function updateParticipantDisplay() {
 }
 
 /**
- * Start transcript functionality
+ * Start transcript functionality using Attendee.ai
  */
 async function startTranscript() {
-  console.log('Starting transcript...');
+  console.log('Starting transcript with Attendee.ai...');
   
   try {
+    // Check if Attendee.ai integration is initialized
+    if (!attendeeIntegration) {
+      throw new Error('Attendee.ai integration not initialized. Please check your API key configuration.');
+    }
+    
     // Update UI
     const startBtn = document.getElementById('start-transcript-btn');
     const stopBtn = document.getElementById('stop-transcript-btn');
@@ -573,16 +633,24 @@ async function startTranscript() {
     if (stopBtn) stopBtn.disabled = false;
     if (status) {
       status.style.display = 'block';
-      status.style.background = '#e8f5e8';
-      status.style.color = '#137333';
-      status.textContent = '🎤 Live transcription active - listening to all participants';
+      status.style.background = '#e8f0fe';
+      status.style.color = '#1a73e8';
+      status.textContent = '🔄 Creating bot and starting transcription...';
     }
     
-    // Start Deepgram transcription
-    await startDeepgramConnection();
+    // Start Attendee.ai transcription
+    // This will create a bot and start polling for transcripts
+    await attendeeIntegration.startTranscription();
     
     isTranscribing = true;
-    console.log('Transcription started successfully');
+    
+    if (status) {
+      status.style.background = '#e8f5e8';
+      status.style.color = '#137333';
+      status.textContent = '🎤 Live transcription active - receiving transcripts from Attendee.ai';
+    }
+    
+    console.log('✅ Transcription started successfully with Attendee.ai');
     
   } catch (error) {
     console.error('Error starting transcription:', error);
@@ -591,8 +659,15 @@ async function startTranscript() {
     // Reset UI on error
     const startBtn = document.getElementById('start-transcript-btn');
     const stopBtn = document.getElementById('stop-transcript-btn');
+    const status = document.getElementById('transcript-status');
+    
     if (startBtn) startBtn.disabled = false;
     if (stopBtn) stopBtn.disabled = true;
+    if (status) {
+      status.style.background = '#fce8e6';
+      status.style.color = '#d93025';
+      status.textContent = '❌ Failed to start transcription: ' + error.message;
+    }
   }
 }
 
@@ -603,8 +678,10 @@ async function stopTranscript() {
   console.log('Stopping transcript...');
   
   try {
-    // Stop Deepgram transcription
-    await stopDeepgramConnection();
+    // Stop Attendee.ai transcription
+    if (attendeeIntegration && isTranscribing) {
+      await attendeeIntegration.stopTranscription();
+    }
     
     isTranscribing = false;
     
@@ -621,7 +698,7 @@ async function stopTranscript() {
       status.textContent = '⏹️ Transcription stopped';
     }
     
-    console.log('Transcription stopped successfully');
+    console.log('✅ Transcription stopped successfully');
     
   } catch (error) {
     console.error('Error stopping transcription:', error);
@@ -629,44 +706,6 @@ async function stopTranscript() {
   }
 }
 
-/**
- * Start Deepgram connection
- */
-async function startDeepgramConnection() {
-  console.log('Starting Deepgram connection...');
-  
-  if (!transcriptionManager) {
-    throw new Error('Transcription manager not initialized');
-  }
-  
-  try {
-    await transcriptionManager.startTranscription();
-    console.log('Deepgram connection started successfully');
-  } catch (error) {
-    console.error('Error starting Deepgram connection:', error);
-    throw error;
-  }
-}
-
-/**
- * Stop Deepgram connection
- */
-async function stopDeepgramConnection() {
-  console.log('Stopping Deepgram connection...');
-  
-  if (!transcriptionManager) {
-    console.warn('Transcription manager not initialized');
-    return;
-  }
-  
-  try {
-    await transcriptionManager.stopTranscription();
-    console.log('Deepgram connection stopped successfully');
-  } catch (error) {
-    console.error('Error stopping Deepgram connection:', error);
-    throw error;
-  }
-}
 
 /**
  * Show status message in side panel

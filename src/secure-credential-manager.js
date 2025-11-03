@@ -64,11 +64,12 @@ export class SecureCredentialManager {
         // Browser environment - credentials should be provided via secure means
         console.warn('⚠️ Running in browser environment - credentials should be provided securely');
         
-        // For Google Meet Add-ons, we only need the cloud project number and Deepgram API key
+        // For Google Meet Add-ons, we only need the cloud project number, Deepgram API key, and Attendee.ai API key
         // These can be provided via environment variables or configuration
         this.credentials = {
           cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER || '409997382473',
           deepgramApiKey: process.env.DEEPGRAM_API_KEY || '306114cbf5e0f315e34cc259af3d16b9fe000992',
+          attendeeApiKey: process.env.ATTENDEE_API_KEY || 'FMviPsiy3HSqx50aA51S4cFuTx868JBB',
           mainStageUrl: process.env.MAIN_STAGE_URL || window.location.origin + '/mainstage.html',
           sidePanelUrl: process.env.SIDE_PANEL_URL || window.location.origin + '/sidepanel.html',
           eventsBackendUrl: process.env.EVENTS_BACKEND_URL || null,
@@ -87,6 +88,7 @@ export class SecureCredentialManager {
         clientId: process.env.CLIENT_ID,
         cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER,
         deepgramApiKey: process.env.DEEPGRAM_API_KEY,
+        attendeeApiKey: process.env.ATTENDEE_API_KEY || '',
         mainStageUrl: process.env.MAIN_STAGE_URL,
         sidePanelUrl: process.env.SIDE_PANEL_URL,
         nodeEnv: process.env.NODE_ENV || 'development',
@@ -183,18 +185,19 @@ export class SecureCredentialManager {
       throw new Error('Credential manager not initialized. Call initialize() first.');
     }
     
-    // In browser mode, return only the credentials we have
-    if (this.isBrowserMode) {
-      return {
-        cloudProjectNumber: this.credentials.cloudProjectNumber,
-        deepgramApiKey: this.credentials.deepgramApiKey,
-        mainStageUrl: this.credentials.mainStageUrl,
-        sidePanelUrl: this.credentials.sidePanelUrl,
-        nodeEnv: this.credentials.nodeEnv,
-        logLevel: this.credentials.logLevel,
-        isBrowserMode: true
-      };
-    }
+      // In browser mode, return only the credentials we have
+      if (this.isBrowserMode) {
+        return {
+          cloudProjectNumber: this.credentials.cloudProjectNumber,
+          deepgramApiKey: this.credentials.deepgramApiKey,
+          attendeeApiKey: this.credentials.attendeeApiKey,
+          mainStageUrl: this.credentials.mainStageUrl,
+          sidePanelUrl: this.credentials.sidePanelUrl,
+          nodeEnv: this.credentials.nodeEnv,
+          logLevel: this.credentials.logLevel,
+          isBrowserMode: true
+        };
+      }
     
     if (this.validationErrors.length > 0) {
       throw new Error(`Invalid credentials: ${this.validationErrors.join(', ')}`);

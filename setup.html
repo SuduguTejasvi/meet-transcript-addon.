@@ -68,6 +68,27 @@
     <div class="container">
         <h1>Live Transcript Setup Guide</h1>
         <p>Welcome to Live Transcript! This guide will help you set up and start using real-time transcription in your Google Meet sessions.</p>
+
+        <div class="step">
+            <h3>Optional: Browser-based audio capture (no Meet API)</h3>
+            <p>
+                You can capture audio directly in the browser from your microphone or the current tab (e.g., Google Meet tab)
+                and stream it to the transcription service without joining as a bot. This preserves meeting quality and user experience.
+            </p>
+            <div style="display: grid; gap: 10px; margin-top: 10px;">
+                <label for="dg-key"><strong>Deepgram API Key</strong></label>
+                <input id="dg-key" type="password" placeholder="dg_xxx..." style="padding: 8px; width: 100%;" />
+
+                <div style="display:flex; gap:8px; flex-wrap: wrap; margin-top: 6px;">
+                    <button id="start-tab" style="padding:10px 14px; background:#34a853; color:#fff; border:none; border-radius:6px; cursor:pointer;">Start Tab Transcript</button>
+                    <button id="start-mic" style="padding:10px 14px; background:#1a73e8; color:#fff; border:none; border-radius:6px; cursor:pointer;">Start Mic Transcript</button>
+                    <button id="stop-cap" style="padding:10px 14px; background:#ea4335; color:#fff; border:none; border-radius:6px; cursor:not-allowed; opacity:.6;" disabled>Stop</button>
+                </div>
+
+                <div id="cap-status" class="code" style="display:none;">Ready</div>
+                <pre id="cap-log" class="code" style="height: 240px; overflow:auto; white-space: pre-wrap;"></pre>
+            </div>
+        </div>
         
         <div class="requirement">
             <h2>📋 Requirements</h2>
@@ -214,167 +235,154 @@
             <h2>✅ Setup Complete!</h2>
             <p>Once you've completed these steps, you should be able to use Live Transcript in your Google Meet sessions. Enjoy real-time transcription!</p>
         </div>
-
-        <div class="step">
-            <h3>Optional: Browser Audio Capture (no Meet API)</h3>
-            <p>Capture audio directly in your browser without the Google Meet API. You can stream from your microphone or from the current tab (share tab audio) and get real‑time transcripts.</p>
-            <div style="margin:12px 0;">
-                <label><strong>Deepgram API Key</strong></label><br>
-                <input id="dgKey" type="password" placeholder="dg_xxx..." style="width:100%;max-width:520px;">
-            </div>
-            <div style="margin:12px 0; display:flex; gap:8px; flex-wrap:wrap;">
-                <button id="startMic">Start Mic Transcription</button>
-                <button id="startTab">Start Current Tab Transcription</button>
-                <button id="stopAll" disabled>Stop</button>
-            </div>
-            <pre id="dgLog" class="code" style="height:260px; overflow:auto; white-space:pre-wrap;"></pre>
-            <div id="dgOut" class="code" style="margin-top:10px; min-height:60px;"></div>
-            <p style="font-size:12px;color:#666; margin-top:8px;">Note: For tab audio, your browser will prompt you to "Share this tab" and you must enable "Share tab audio". This captures audio locally in your browser and does not join the meeting as a bot.</p>
-        </div>
     </div>
-</body>
-<script>
-(function() {
-    const logEl = document.getElementById('dgLog');
-    const outEl = document.getElementById('dgOut');
-    const startMicBtn = document.getElementById('startMic');
-    const startTabBtn = document.getElementById('startTab');
-    const stopBtn = document.getElementById('stopAll');
-    const keyEl = document.getElementById('dgKey');
 
-    let ws = null;
-    let audioContext = null;
-    let mediaStream = null;
-    let processor = null;
-    let sourceNode = null;
+    <script>
+        (function() {
+            const startTabBtn = document.getElementById('start-tab');
+            const startMicBtn = document.getElementById('start-mic');
+            const stopBtn = document.getElementById('stop-cap');
+            const statusEl = document.getElementById('cap-status');
+            const logEl = document.getElementById('cap-log');
+            const keyEl = document.getElementById('dg-key');
 
-    function log() {
-        const msg = Array.from(arguments).join(' ');
-        logEl.textContent += msg + '\n';
-        logEl.scrollTop = logEl.scrollHeight;
-    }
+            let ws = null;
+            let audioContext = null;
+            let sourceNode = null;
+            let processorNode = null;
+            let activeStream = null;
 
-    function floatTo16BitPCM(float32Array) {
-        const int16 = new Int16Array(float32Array.length);
-        for (let i = 0; i < float32Array.length; i++) {
-            const s = Math.max(-1, Math.min(1, float32Array[i]));
-            int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        return int16;
-    }
-
-    function openDeepgram(key) {
-        return new Promise((resolve, reject) => {
-            const url = 'wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&punctuate=true&diarize=true&interim_results=true&smart_format=true&encoding=linear16&sample_rate=16000&channels=1';
-            ws = new WebSocket(url, []);
-            // Deepgram expects the key in the Authorization header; browsers can't set headers for WS.
-            // Deepgram also supports the "token" query param for browser WS.
-            // If your key is a short-lived token, append as ?token=... Instead, we will send an auth message.
-            ws.addEventListener('open', () => {
-                try {
-                    ws.send(JSON.stringify({ type: 'authorization', token: key }));
-                } catch(e) {}
-                resolve();
-            });
-            ws.addEventListener('error', (e) => reject(e));
-            ws.addEventListener('close', () => log('Deepgram socket closed'));
-            ws.addEventListener('message', (evt) => {
-                try {
-                    const data = JSON.parse(evt.data);
-                    if (data.channel && data.channel.alternatives && data.channel.alternatives[0]) {
-                        const alt = data.channel.alternatives[0];
-                        if (alt.transcript) {
-                            outEl.textContent = alt.transcript;
-                        }
-                    }
-                } catch (_) {}
-            });
-        });
-    }
-
-    async function startCapture(kind) {
-        const key = keyEl.value.trim();
-        if (!key) { log('Please enter Deepgram API key'); return; }
-        stopCapture();
-        log('Opening Deepgram…');
-        try {
-            await openDeepgram(key);
-        } catch (e) {
-            log('Failed to connect to Deepgram:', e.message || e);
-            return;
-        }
-
-        try {
-            if (kind === 'mic') {
-                mediaStream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        channelCount: 1,
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }
-                });
-                log('Mic stream started');
-            } else {
-                const ds = await navigator.mediaDevices.getDisplayMedia({
-                    audio: true,
-                    video: true
-                });
-                // Prefer the audio track, we don't need to render video
-                const v = ds.getVideoTracks()[0];
-                if (v) v.stop();
-                mediaStream = new MediaStream(ds.getAudioTracks());
-                log('Tab audio stream started (ensure "Share tab audio" was enabled)');
+            function log() {
+                logEl.textContent += Array.from(arguments).join(' ') + '\n';
+                logEl.scrollTop = logEl.scrollHeight;
             }
-        } catch (e) {
-            log('Failed to start media:', e.message || e);
-            return;
-        }
 
-        try {
-            // Use 16kHz context for direct linear16 streaming
-            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            sourceNode = audioContext.createMediaStreamSource(mediaStream);
-            processor = audioContext.createScriptProcessor(4096, 1, 1);
-            processor.onaudioprocess = (evt) => {
-                if (!ws || ws.readyState !== 1) return;
-                const input = evt.inputBuffer.getChannelData(0);
-                const int16 = floatTo16BitPCM(input);
-                ws.send(int16);
-            };
-            sourceNode.connect(processor);
-            processor.connect(audioContext.destination);
-            stopBtn.disabled = false;
-            startMicBtn.disabled = true;
-            startTabBtn.disabled = true;
-            log('Streaming audio to Deepgram…');
-        } catch (e) {
-            log('Audio pipeline error:', e.message || e);
-            stopCapture();
-        }
-    }
+            function setStatus(text, type = 'info') {
+                statusEl.style.display = 'block';
+                statusEl.style.background = type === 'error' ? '#fce8e6' : type === 'ok' ? '#e8f5e8' : '#e8f0fe';
+                statusEl.style.color = type === 'error' ? '#d93025' : type === 'ok' ? '#137333' : '#1a73e8';
+                statusEl.textContent = text;
+            }
 
-    function stopCapture() {
-        try { if (processor) processor.disconnect(); } catch(_) {}
-        try { if (sourceNode) sourceNode.disconnect(); } catch(_) {}
-        try { if (audioContext) audioContext.close(); } catch(_) {}
-        processor = null; sourceNode = null; audioContext = null;
-        if (mediaStream) {
-            mediaStream.getTracks().forEach(t => { try { t.stop(); } catch(_) {} });
-            mediaStream = null;
-        }
-        if (ws) {
-            try { ws.close(); } catch(_) {}
-            ws = null;
-        }
-        stopBtn.disabled = true;
-        startMicBtn.disabled = false;
-        startTabBtn.disabled = false;
-    }
+            function enableControls(running) {
+                startTabBtn.disabled = running;
+                startMicBtn.disabled = running;
+                stopBtn.disabled = !running;
+                stopBtn.style.opacity = running ? '1' : '.6';
+                stopBtn.style.cursor = running ? 'pointer' : 'not-allowed';
+            }
 
-    startMicBtn.addEventListener('click', () => startCapture('mic'));
-    startTabBtn.addEventListener('click', () => startCapture('tab'));
-    stopBtn.addEventListener('click', () => { log('Stopping…'); stopCapture(); });
-})();
-</script>
+            function connectDeepgram(apiKey) {
+                return new Promise((resolve, reject) => {
+                    try {
+                        const base = 'wss://api.deepgram.com/v1/listen';
+                        const params = new URLSearchParams({
+                            model: 'nova-2',
+                            language: 'en-US',
+                            punctuate: 'true',
+                            interim_results: 'true',
+                            smart_format: 'true',
+                            encoding: 'linear16',
+                            sample_rate: '16000',
+                            channels: '1',
+                            token: apiKey
+                        });
+                        const url = `${base}?${params.toString()}`;
+                        ws = new WebSocket(url);
+                        ws.onopen = () => { log('Deepgram connected'); resolve(); };
+                        ws.onerror = (e) => { reject(new Error('WebSocket error')); };
+                        ws.onclose = () => { log('Deepgram closed'); };
+                        ws.onmessage = (evt) => {
+                            try {
+                                const msg = JSON.parse(evt.data);
+                                const alt = msg?.channel?.alternatives?.[0];
+                                if (alt && alt.transcript) {
+                                    const prefix = msg.is_final ? 'FINAL' : 'PART';
+                                    log(`[${prefix}]`, alt.transcript);
+                                }
+                            } catch (_) { /* ignore non-JSON */ }
+                        };
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            }
+
+            function startProcessing(stream) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                sourceNode = audioContext.createMediaStreamSource(stream);
+                processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+                processorNode.onaudioprocess = (e) => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    const input = e.inputBuffer.getChannelData(0);
+                    const int16 = new Int16Array(input.length);
+                    for (let i = 0; i < input.length; i++) {
+                        let s = Math.max(-1, Math.min(1, input[i]));
+                        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    ws.send(int16);
+                };
+                sourceNode.connect(processorNode);
+                processorNode.connect(audioContext.destination);
+                activeStream = stream;
+            }
+
+            async function startTabCapture() {
+                const key = (keyEl.value || '').trim();
+                if (!key) { setStatus('Enter Deepgram API key', 'error'); return; }
+                enableControls(true);
+                try {
+                    setStatus('Requesting tab audio…');
+                    const stream = await navigator.mediaDevices.getDisplayMedia({ audio: { echoCancellation: true }, video: true });
+                    // Some browsers may separate system audio; ensure at least one audio track exists
+                    if (!stream.getAudioTracks().length) {
+                        throw new Error('No audio track in captured tab');
+                    }
+                    await connectDeepgram(key);
+                    startProcessing(stream);
+                    setStatus('Transcribing tab audio…', 'ok');
+                } catch (e) {
+                    log('Start tab error:', e.message || e);
+                    setStatus(e.message || 'Failed to start tab capture', 'error');
+                    enableControls(false);
+                }
+            }
+
+            async function startMicCapture() {
+                const key = (keyEl.value || '').trim();
+                if (!key) { setStatus('Enter Deepgram API key', 'error'); return; }
+                enableControls(true);
+                try {
+                    setStatus('Requesting microphone…');
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+                    await connectDeepgram(key);
+                    startProcessing(stream);
+                    setStatus('Transcribing microphone…', 'ok');
+                } catch (e) {
+                    log('Start mic error:', e.message || e);
+                    setStatus(e.message || 'Failed to start mic capture', 'error');
+                    enableControls(false);
+                }
+            }
+
+            function stopAll() {
+                try { if (processorNode) processorNode.disconnect(); } catch (_) {}
+                try { if (sourceNode) sourceNode.disconnect(); } catch (_) {}
+                try { if (audioContext) audioContext.close(); } catch (_) {}
+                processorNode = null; sourceNode = null; audioContext = null;
+                if (activeStream) {
+                    activeStream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+                    activeStream = null;
+                }
+                if (ws) { try { ws.close(); } catch (_) {} ws = null; }
+                setStatus('Capture stopped');
+                enableControls(false);
+            }
+
+            startTabBtn?.addEventListener('click', startTabCapture);
+            startMicBtn?.addEventListener('click', startMicCapture);
+            stopBtn?.addEventListener('click', stopAll);
+        })();
+    </script>
+</body>
 </html>
