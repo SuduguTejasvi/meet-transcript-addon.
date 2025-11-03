@@ -153,12 +153,15 @@ export class MeetMediaAPI {
       // Prefer real participants via Workspace Events API backend when available
       const participants = await this.getCurrentParticipants();
       
-      console.log('Simulated participants:', participants);
-      
-      // Process each participant
-      participants.forEach(participant => {
-        this.handleParticipantJoined(participant);
-      });
+      if (participants.length > 0) {
+        console.log('Found participants:', participants.length);
+        // Process each participant
+        participants.forEach(participant => {
+          this.handleParticipantJoined(participant);
+        });
+      } else {
+        console.log('No participants found via API');
+      }
       
       console.log('✅ Participant tracking started');
     } catch (error) {

@@ -153,7 +153,9 @@ export class AttendeeIntegration {
       if (this.sidePanelClient) {
         try {
           const meetingInfo = await this.sidePanelClient.getMeetingInfo?.();
-          console.log('Meeting info from sidePanelClient:', meetingInfo);
+          console.log('📋 Meeting info from sidePanelClient:', JSON.stringify(meetingInfo, null, 2));
+          
+          // Check all possible fields that might contain the meeting URL or code
           if (meetingInfo?.meetingUrl) {
             console.log('✅ Found meeting URL from sidePanelClient:', meetingInfo.meetingUrl);
             return meetingInfo.meetingUrl;
@@ -169,6 +171,21 @@ export class AttendeeIntegration {
             console.log('✅ Constructed meeting URL from meetingId:', url);
             return url;
           }
+          // Check for any field that looks like a meeting code/URL
+          for (const [key, value] of Object.entries(meetingInfo || {})) {
+            if (typeof value === 'string') {
+              if (value.includes('meet.google.com')) {
+                console.log(`✅ Found meeting URL in field ${key}:`, value);
+                return value;
+              }
+              // Check if it looks like a meeting code (abc-defg-hij format)
+              if (/^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(value)) {
+                const url = `https://meet.google.com/${value}`;
+                console.log(`✅ Found meeting code in field ${key}:`, url);
+                return url;
+              }
+            }
+          }
         } catch (err) {
           console.warn('Could not get meeting URL from sidePanelClient:', err);
         }
@@ -177,7 +194,7 @@ export class AttendeeIntegration {
       if (this.mainStageClient) {
         try {
           const meetingInfo = await this.mainStageClient.getMeetingInfo?.();
-          console.log('Meeting info from mainStageClient:', meetingInfo);
+          console.log('📋 Meeting info from mainStageClient:', JSON.stringify(meetingInfo, null, 2));
           if (meetingInfo?.meetingUrl) {
             console.log('✅ Found meeting URL from mainStageClient:', meetingInfo.meetingUrl);
             return meetingInfo.meetingUrl;
@@ -192,6 +209,20 @@ export class AttendeeIntegration {
             console.log('✅ Constructed meeting URL from meetingId:', url);
             return url;
           }
+          // Check for any field that looks like a meeting code/URL
+          for (const [key, value] of Object.entries(meetingInfo || {})) {
+            if (typeof value === 'string') {
+              if (value.includes('meet.google.com')) {
+                console.log(`✅ Found meeting URL in field ${key}:`, value);
+                return value;
+              }
+              if (/^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(value)) {
+                const url = `https://meet.google.com/${value}`;
+                console.log(`✅ Found meeting code in field ${key}:`, url);
+                return url;
+              }
+            }
+          }
         } catch (err) {
           console.warn('Could not get meeting URL from mainStageClient:', err);
         }
@@ -201,7 +232,7 @@ export class AttendeeIntegration {
       if (this.credentials?.meetSession) {
         try {
           const meetingInfo = await this.credentials.meetSession.getMeetingInfo?.();
-          console.log('Meeting info from meetSession:', meetingInfo);
+          console.log('📋 Meeting info from meetSession:', JSON.stringify(meetingInfo, null, 2));
           if (meetingInfo?.meetingUrl) {
             console.log('✅ Found meeting URL from meetSession:', meetingInfo.meetingUrl);
             return meetingInfo.meetingUrl;
@@ -215,6 +246,20 @@ export class AttendeeIntegration {
             const url = `https://meet.google.com/${meetingInfo.meetingId}`;
             console.log('✅ Constructed meeting URL from meetingId:', url);
             return url;
+          }
+          // Check for any field that looks like a meeting code/URL
+          for (const [key, value] of Object.entries(meetingInfo || {})) {
+            if (typeof value === 'string') {
+              if (value.includes('meet.google.com')) {
+                console.log(`✅ Found meeting URL in field ${key}:`, value);
+                return value;
+              }
+              if (/^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(value)) {
+                const url = `https://meet.google.com/${value}`;
+                console.log(`✅ Found meeting code in field ${key}:`, url);
+                return url;
+              }
+            }
           }
         } catch (err) {
           console.warn('Could not get meeting URL from Meet session:', err);

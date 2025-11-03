@@ -628,9 +628,14 @@ async function startTranscript() {
     }
     
     // Update UI
-    const startBtn = document.getElementById('start-transcript-btn');
-    const stopBtn = document.getElementById('stop-transcript-btn');
+    const startBtn = document.getElementById('start-transcript') || document.getElementById('start-transcript-btn');
+    const stopBtn = document.getElementById('stop-transcript') || document.getElementById('stop-transcript-btn');
     const status = document.getElementById('transcript-status');
+    const meetingUrlContainer = document.getElementById('meeting-url-input-container');
+    const meetingUrlInput = document.getElementById('meeting-url-input');
+    
+    // Check if we need manual URL entry
+    const meetingUrl = meetingUrlInput?.value?.trim();
     
     if (startBtn) startBtn.disabled = true;
     if (stopBtn) stopBtn.disabled = false;
@@ -643,7 +648,11 @@ async function startTranscript() {
     
     // Start Attendee.ai transcription
     // This will create a bot and start polling for transcripts
-    await attendeeIntegration.startTranscription();
+    // Pass manual URL if provided
+    await attendeeIntegration.startTranscription(meetingUrl || null);
+    
+    // Hide manual input if successful
+    if (meetingUrlContainer) meetingUrlContainer.style.display = 'none';
     
     isTranscribing = true;
     
@@ -659,9 +668,17 @@ async function startTranscript() {
     console.error('Error starting transcription:', error);
     showStatus('Error starting transcription: ' + error.message, 'error');
     
+    // Show manual input if URL detection failed
+    if (error.message.includes('Could not detect meeting URL') || error.message.includes('meeting URL')) {
+      const meetingUrlContainer = document.getElementById('meeting-url-input-container');
+      if (meetingUrlContainer) {
+        meetingUrlContainer.style.display = 'block';
+      }
+    }
+    
     // Reset UI on error
-    const startBtn = document.getElementById('start-transcript-btn');
-    const stopBtn = document.getElementById('stop-transcript-btn');
+    const startBtn = document.getElementById('start-transcript') || document.getElementById('start-transcript-btn');
+    const stopBtn = document.getElementById('stop-transcript') || document.getElementById('stop-transcript-btn');
     const status = document.getElementById('transcript-status');
     
     if (startBtn) startBtn.disabled = false;

@@ -270,6 +270,16 @@
             <button id="start-activity" class="btn btn-primary">
                 🚀 Start Activity
             </button>
+            <div id="meeting-url-input-container" style="display: none; margin-bottom: 10px;">
+                <label for="meeting-url-input" style="display: block; margin-bottom: 5px; font-size: 14px; color: #5f6368;">
+                    Meeting URL or Code:
+                </label>
+                <input type="text" id="meeting-url-input" placeholder="e.g., abc-defg-hij or https://meet.google.com/abc-defg-hij" 
+                       style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">
+                <button id="use-meeting-url" class="btn btn-success" style="width: 100%; margin-top: 8px;">
+                    Use This URL
+                </button>
+            </div>
             <button id="start-transcript" class="btn btn-success">
                 🎤 Start Live Transcript
             </button>
@@ -347,34 +357,27 @@
             }
         }
 
-        // Simulate participant updates for demo
-        function simulateParticipants() {
-            const participantsList = document.getElementById('participants-list');
-            const mockParticipants = [
-                { name: 'John Doe', isSpeaking: false },
-                { name: 'Jane Smith', isSpeaking: true },
-                { name: 'Bob Johnson', isSpeaking: false },
-                { name: 'Alice Brown', isSpeaking: false }
-            ];
-
-            participantsList.innerHTML = '';
-            mockParticipants.forEach(participant => {
-                const participantDiv = document.createElement('div');
-                participantDiv.className = 'participant-item';
-                participantDiv.innerHTML = `
-                    <div class="participant-avatar">${participant.name.charAt(0)}</div>
-                    <div class="participant-info">
-                        <div class="participant-name">${participant.name}</div>
-                        <div class="participant-status">${participant.isSpeaking ? 'Speaking' : 'Listening'}</div>
-                    </div>
-                    <div class="speaking-indicator ${participant.isSpeaking ? '' : 'inactive'}"></div>
-                `;
-                participantsList.appendChild(participantDiv);
+        // Participants will be updated by the main.js module when they're detected
+        
+        // Handle manual meeting URL entry
+        const useMeetingUrlBtn = document.getElementById('use-meeting-url');
+        const meetingUrlInput = document.getElementById('meeting-url-input');
+        
+        if (useMeetingUrlBtn && meetingUrlInput) {
+            useMeetingUrlBtn.addEventListener('click', () => {
+                const url = meetingUrlInput.value.trim();
+                if (url) {
+                    // Try to start transcription with this URL
+                    if (window.startTranscript) {
+                        window.startTranscript();
+                    } else {
+                        updateStatus('Please click "Start Live Transcript" after entering the URL', 'info');
+                    }
+                } else {
+                    updateStatus('Please enter a meeting URL or code', 'error');
+                }
             });
         }
-
-        // Start simulation after a delay
-        setTimeout(simulateParticipants, 2000);
     </script>
 </body>
 </html>
