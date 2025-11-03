@@ -1,0 +1,564 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Meet Media API - Live Audio Test</title>
+<body style="font-family: Arial, sans-serif; padding: 16px; line-height:1.4;">
+  <h2>Meet Media API - Live Audio Test (Developer Preview)</h2>
+  <p style="max-width:800px; color:#444;">
+    This page tests receiving live audio from a Google Meet conference using the Meet Media API.
+    You must be enrolled in the Google Workspace Developer Preview and have a valid OAuth Web Client ID.
+  </p>
+
+  <div style="margin-bottom: 10px;">
+    <label>OAuth Web Client ID:</label><br />
+    <input id="clientId" style="width: 520px;" placeholder="YOUR_CLIENT_ID.apps.googleusercontent.com" />
+  </div>
+
+  <div style="margin-bottom: 10px;">
+    <label>Meet space name (spaces/…):</label><br />
+    <input id="spaceName" style="width: 520px;" placeholder="spaces/AAAA-BBBB-CCC" />
+  </div>
+
+  <div style="margin-bottom: 10px;">
+    <label>Scopes:</label><br />
+    <input style="width: 520px;" disabled
+      value="meetings.conference.media.audio.readonly, meetings.space.readonly, documents.readonly" />
+    <small style="color:#666; display:block; margin-top:4px;">Includes Meet API + Google Docs API for transcript access</small>
+  </div>
+
+  <div style="margin-bottom: 10px;">
+    <label>Deepgram API Key:</label><br />
+    <input id="deepgramKey" type="password" style="width: 520px;" placeholder="Your Deepgram API Key (optional)" />
+    <small style="color:#666; display:block; margin-top:4px;">Get your API key from <a href="https://console.deepgram.com/" target="_blank">console.deepgram.com</a></small>
+  </div>
+
+  <button id="authBtn">Authorize</button>
+  <button id="connectBtn" disabled>Connect Active Conference</button>
+  <button id="hangupBtn" disabled>Hang up</button>
+
+  <div id="audioContainer" style="margin-top:16px;"></div>
+
+  <div style="margin-top:16px;">
+    <h3>Transcription:</h3>
+    <div id="transcriptionContainer" style="background:#fff; padding:12px; border:1px solid #ddd; height:200px; overflow-y:auto; font-family:monospace; white-space:pre-wrap;"></div>
+  </div>
+
+  <div style="margin-top:16px;">
+    <h3>Meet Transcript Entries (REST)</h3>
+    <div style="margin-bottom: 10px;">
+      <label>Transcript entry resource name:</label><br />
+      <input id="entryName" style="width: 520px;" placeholder="conferenceRecords/RECORD_ID/transcripts/TRANSCRIPT_ID/entries/ENTRY_ID" />
+    </div>
+    <button id="getEntryBtn" disabled>Get Transcript Entry</button>
+    <pre id="entryOut" style="margin-top:12px; background:#f0f4ff; padding:12px; height:180px; overflow:auto;"></pre>
+    <div style="margin-top:12px;">
+      <button id="listRecordsBtn" disabled>List Conference Records (from space)</button>
+      <button id="listTranscriptsBtn" disabled>List Transcripts (from latest record)</button>
+      <button id="listEntriesBtn" disabled>List Entries (from latest transcript)</button>
+      <pre id="listOut" style="margin-top:12px; background:#f9f9f9; padding:12px; height:200px; overflow:auto;"></pre>
+    </div>
+  </div>
+
+  <div style="margin-top:16px; padding:12px; background:#fff3cd; border:1px solid #ffc107; border-radius:4px;">
+    <h3>📄 Google Docs Transcript (Alternative Method)</h3>
+    <p style="font-size:12px; color:#856404; margin-bottom:10px;">
+      <strong>Note:</strong> If conference records API returns 404 but transcript exists in Google Docs, use this method instead.
+      Extract the document ID from the Google Docs URL: <code>docs.google.com/document/d/DOCUMENT_ID/...</code>
+    </p>
+    <div style="margin-bottom: 10px;">
+      <label>Google Docs Document ID:</label><br />
+      <input id="docId" style="width: 520px;" placeholder="1kRZnJv1D6h8isQQAayJ5IFin-N7a-P8oYjSdElkKYQ0" />
+    </div>
+    <button id="getDocTranscriptBtn" disabled>Fetch Transcript from Google Docs</button>
+    <pre id="docTranscriptOut" style="margin-top:12px; background:#fff; padding:12px; border:1px solid #ddd; height:250px; overflow:auto; font-size:12px;"></pre>
+  </div>
+
+  <pre id="log" style="margin-top:16px; background:#f7f7f7; padding:12px; height:300px; overflow:auto;"></pre>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    const SCOPES = [
+      'https://www.googleapis.com/auth/meetings.conference.media.audio.readonly',
+      'https://www.googleapis.com/auth/meetings.space.readonly',
+      'https://www.googleapis.com/auth/documents.readonly'
+    ];
+    const LOG = document.getElementById('log');
+    const audioContainer = document.getElementById('audioContainer');
+    const authBtn = document.getElementById('authBtn');
+    const connectBtn = document.getElementById('connectBtn');
+    const hangupBtn = document.getElementById('hangupBtn');
+
+    let accessToken = null;
+    let pc = null;
+    let sessionControl = null;
+    let mediaStats = null;
+    let deepgramConnections = new Map(); // Track active Deepgram connections per audio track
+
+    function log() {
+      LOG.textContent += Array.from(arguments).join(' ') + '\n';
+      LOG.scrollTop = LOG.scrollHeight;
+    }
+
+    function getField(id) { return document.getElementById(id).value.trim(); }
+
+    async function startDeepgramTranscription(audioTrack, trackId, apiKey) {
+      try {
+        // Clean and validate API key
+        const cleanApiKey = apiKey.trim();
+        if (!cleanApiKey || cleanApiKey.length < 20) {
+          log(`Invalid Deepgram API key for track ${trackId}. Key should be at least 20 characters.`);
+          return;
+        }
+        
+        // Create MediaStream from the audio track
+        const audioStream = new MediaStream([audioTrack]);
+        
+        // Initialize MediaRecorder with WebM format (matching reference code)
+        const mediaRecorder = new MediaRecorder(audioStream, {
+          mimeType: 'audio/webm;codecs=opus'
+        });
+        
+        // Connect to Deepgram WebSocket using subprotocols (matching reference code)
+        // Using nova-3 model with smart_format and numerals like the reference
+        const deepgramUrl = 'wss://api.deepgram.com/v1/listen?model=nova-3&numerals=true&smart_format=true&interim_results=true';
+        log(`Connecting to Deepgram for track ${trackId}...`);
+        
+        const socket = new WebSocket(deepgramUrl, ['token', cleanApiKey]);
+        
+        let connectionTimeout = null;
+        
+        // Set connection timeout
+        connectionTimeout = setTimeout(() => {
+          if (socket.readyState === WebSocket.CONNECTING) {
+            log(`Deepgram connection timeout for track ${trackId}. The API key may be invalid or there's a network issue.`);
+            socket.close();
+          }
+        }, 10000); // 10 second timeout
+        
+        socket.onopen = () => {
+          clearTimeout(connectionTimeout);
+          log(`Deepgram connected successfully for track ${trackId}`);
+          
+          // Start MediaRecorder when WebSocket is open (matching reference code)
+          mediaRecorder.start(1000); // Send data every second
+          
+          // Send audio chunks to Deepgram when available
+          mediaRecorder.ondataavailable = async (event) => {
+            if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+              try {
+                socket.send(event.data);
+              } catch (sendErr) {
+                log(`Error sending audio data for track ${trackId}:`, sendErr.message || sendErr);
+              }
+            } else if (event.data.size === 0) {
+              log(`No audio data for track ${trackId}`);
+            }
+          };
+          
+          deepgramConnections.set(trackId, { socket, mediaRecorder, audioStream });
+        };
+        
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.channel && data.channel.alternatives && data.channel.alternatives.length > 0) {
+              const transcript = data.channel.alternatives[0].transcript;
+              if (transcript) {
+                appendTranscription(trackId, transcript, data.is_final);
+              }
+            }
+          } catch (parseErr) {
+            log('Failed to parse Deepgram response:', parseErr.message || parseErr);
+          }
+        };
+        
+        socket.onerror = (error) => {
+          clearTimeout(connectionTimeout);
+          log(`Deepgram WebSocket error for track ${trackId}.`);
+          log('Common issues:');
+          log('1. Invalid or expired API key - Get a new key from console.deepgram.com');
+          log('2. Network/firewall blocking WebSocket connections');
+          log('3. API key format issue - Ensure no extra spaces or characters');
+        };
+        
+        socket.onclose = (event) => {
+          clearTimeout(connectionTimeout);
+          log(`Deepgram disconnected for track ${trackId}. Code: ${event.code}${event.reason ? `, Reason: ${event.reason}` : ''}`);
+          
+          if (event.code === 1006) {
+            log('Connection closed abnormally (1006). Common causes:');
+            log('- Invalid API key (check console.deepgram.com)');
+            log('- Network/firewall blocking WebSocket');
+            log('- API key doesn\'t have WebSocket transcription permissions');
+          } else if (event.code === 1002) {
+            log('Protocol error (1002). Check API key format.');
+          } else if (event.code === 1008) {
+            log('Policy violation (1008). API key may be invalid or expired.');
+          }
+          
+          deepgramConnections.delete(trackId);
+          try {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+              mediaRecorder.stop();
+            }
+            audioStream.getTracks().forEach(track => track.stop());
+          } catch (_) {}
+        };
+        
+      } catch (err) {
+        log('Failed to start Deepgram:', err && err.message ? err.message : err);
+      }
+    }
+
+    function appendTranscription(trackId, text, isFinal) {
+      const container = document.getElementById('transcriptionContainer');
+      if (!container) return;
+      
+      const span = document.createElement('span');
+      span.textContent = text + ' ';
+      span.style.color = isFinal ? '#000' : '#666';
+      span.style.fontStyle = isFinal ? 'normal' : 'italic';
+      
+      container.appendChild(span);
+      
+      if (isFinal) {
+        container.appendChild(document.createTextNode('\n'));
+      }
+      
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function createAudioElement(labelText) {
+      const wrapper = document.createElement('div');
+      wrapper.style.marginTop = '8px';
+
+      const label = document.createElement('div');
+      label.textContent = labelText;
+      label.style.fontSize = '12px';
+      label.style.color = '#555';
+
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.style.width = '520px';
+
+      wrapper.appendChild(label);
+      wrapper.appendChild(audio);
+      audioContainer.appendChild(wrapper);
+      return audio;
+    }
+
+    function initPeerConnection() {
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
+      });
+
+      // Per Meet Media API: offer must include exactly 3 recvonly audio m-lines
+      for (let i = 0; i < 3; i++) {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+      }
+
+      // Required ordered data channels
+      sessionControl = pc.createDataChannel('session-control', { ordered: true });
+      mediaStats = pc.createDataChannel('media-stats', { ordered: true });
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          // Trickle ICE is supported by Meet; nothing to do here for REST flow.
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        log('PC state:', pc.connectionState);
+      };
+
+      pc.ontrack = (e) => {
+        log('ontrack:', e.track.kind, 'streams:', e.streams.length, 'id:', e.track.id);
+        if (e.track.kind === 'audio') {
+          const audioEl = createAudioElement(`Incoming audio track (id: ${e.track.id})`);
+          const stream = new MediaStream([e.track]);
+          audioEl.srcObject = stream;
+          const playPromise = audioEl.play();
+          if (playPromise && typeof playPromise.then === 'function') {
+            playPromise.catch((err) => log('Audio autoplay blocked; press play:', err && err.message ? err.message : err));
+          }
+          
+          // Start Deepgram transcription if API key is provided
+          const deepgramKey = getField('deepgramKey');
+          if (deepgramKey && deepgramKey.trim().length > 0) {
+            if (deepgramKey.length < 20) {
+              log(`Warning: Deepgram API key seems too short. Please verify it's correct for track ${e.track.id}`);
+            }
+            startDeepgramTranscription(e.track, e.track.id, deepgramKey.trim());
+          } else {
+            log(`No Deepgram API key provided. Transcription disabled for track ${e.track.id}`);
+          }
+        }
+      };
+    }
+
+    async function authorize() {
+      return new Promise((resolve, reject) => {
+        const clientId = getField('clientId');
+        if (!clientId) return reject(new Error('Missing OAuth Web Client ID'));
+        google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: SCOPES.join(' '),
+          callback: (resp) => {
+            if (resp && resp.access_token) {
+              accessToken = resp.access_token;
+              log('Authorized. Access token acquired.');
+              connectBtn.disabled = false;
+              document.getElementById('getEntryBtn').disabled = false;
+              document.getElementById('listRecordsBtn').disabled = false;
+              document.getElementById('listTranscriptsBtn').disabled = false;
+              document.getElementById('listEntriesBtn').disabled = false;
+              document.getElementById('getDocTranscriptBtn').disabled = false;
+              resolve();
+            } else {
+              reject(new Error('Failed to get access token'));
+            }
+          },
+          error_callback: (err) => reject(err),
+        }).requestAccessToken({ prompt: 'consent' });
+      });
+    }
+
+    async function resolveSpaceName(raw) {
+      // If input already looks like a resource name, use it directly
+      if (raw.startsWith('spaces/')) return raw;
+      // Treat as meeting code; lookup the space name via proxy
+      const resp = await fetch(`http://localhost:8787/api/lookupSpace?meetingCode=${encodeURIComponent(raw)}`, {
+        headers: { 'X-Access-Token': accessToken }
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(`lookupSpace failed: ${resp.status} ${t}`);
+      }
+      const data = await resp.json();
+      if (!data || !data.name) throw new Error('lookupSpace: no name in response');
+      return data.name; // e.g., spaces/AAAA-BBBB-CCC
+    }
+
+    async function connectActiveConference() {
+      const rawInput = getField('spaceName');
+      if (!rawInput) {
+        log('Please enter a valid Meet space name (spaces/...)');
+        return;
+      }
+
+      audioContainer.innerHTML = '';
+      // Clear transcription container
+      const transcriptionContainer = document.getElementById('transcriptionContainer');
+      if (transcriptionContainer) transcriptionContainer.innerHTML = '';
+      initPeerConnection();
+
+      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+      await pc.setLocalDescription(offer);
+      log('Local SDP offer created. Sending to Meet…');
+
+      let spaceName;
+      try {
+        spaceName = await resolveSpaceName(rawInput);
+        log('Using space name:', spaceName);
+      } catch (e) {
+        log(e && e.message ? e.message : e);
+        return;
+      }
+
+      // Use local proxy to avoid browser CORS restrictions
+      const res = await fetch('http://localhost:8787/api/connectActiveConference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Access-Token': accessToken
+        },
+        body: JSON.stringify({ spaceName, offer: offer.sdp })
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        log('connectActiveConference failed:', res.status, txt);
+        return;
+      }
+
+      const data = await res.json();
+      if (!data || !data.answer) {
+        log('No SDP answer in response.');
+        return;
+      }
+
+      await pc.setRemoteDescription({ type: 'answer', sdp: data.answer });
+      log('Remote SDP answer set. ICE connecting…');
+      hangupBtn.disabled = false;
+    }
+
+    async function hangup() {
+      // Close all Deepgram connections
+      deepgramConnections.forEach(({ socket, mediaRecorder, audioStream }) => {
+        try {
+          if (socket && socket.readyState === WebSocket.OPEN) socket.close();
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+          }
+          if (audioStream) {
+            audioStream.getTracks().forEach(track => track.stop());
+          }
+        } catch (_) {}
+      });
+      deepgramConnections.clear();
+      
+      if (pc) {
+        try { pc.getSenders().forEach(s => { try { s.track && s.track.stop(); } catch (_) {} }); } catch (_) {}
+        try { pc.close(); } catch (_) {}
+        pc = null;
+      }
+      hangupBtn.disabled = true;
+      log('PeerConnection closed.');
+      
+      // Clear transcription
+      const container = document.getElementById('transcriptionContainer');
+      if (container) container.innerHTML = '';
+    }
+
+    document.getElementById('authBtn').addEventListener('click', async () => {
+      document.getElementById('authBtn').disabled = true;
+      try { await authorize(); } catch (e) { log('Auth error:', e && e.message ? e.message : e); document.getElementById('authBtn').disabled = false; }
+    });
+    document.getElementById('connectBtn').addEventListener('click', () => connectActiveConference());
+    document.getElementById('hangupBtn').addEventListener('click', () => hangup());
+
+    async function getTranscriptEntry() {
+      const name = getField('entryName');
+      if (!name) { log('Enter a transcript entry resource name.'); return; }
+      try {
+        const url = `http://localhost:8787/api/transcripts/entry?name=${encodeURIComponent(name)}`;
+        const res = await fetch(url, { headers: { 'X-Access-Token': accessToken } });
+        const txt = await res.text();
+        const out = document.getElementById('entryOut');
+        out.textContent = res.ok ? JSON.stringify(JSON.parse(txt), null, 2) : `Error ${res.status}: ${txt}`;
+      } catch (e) {
+        document.getElementById('entryOut').textContent = `Request failed: ${e && e.message ? e.message : e}`;
+      }
+    }
+    document.getElementById('getEntryBtn').addEventListener('click', getTranscriptEntry);
+
+    // Helper to pretty print to listOut
+    function setListOut(objOrText) {
+      const out = document.getElementById('listOut');
+      if (typeof objOrText === 'string') { out.textContent = objOrText; return; }
+      try { out.textContent = JSON.stringify(objOrText, null, 2); }
+      catch (_) { out.textContent = String(objOrText); }
+    }
+
+    async function listConferenceRecordsForSpace() {
+      const spaceName = getField('spaceName') || LOG.spaceNameResolved || '';
+      if (!spaceName) { setListOut('Enter a space name or connect first.'); return; }
+      const resolvedSpace = spaceName.startsWith('spaces/') ? spaceName : await resolveSpaceName(spaceName);
+      const url = `http://localhost:8787/api/conferenceRecords?spaceName=${encodeURIComponent(resolvedSpace)}`;
+      const res = await fetch(url, { headers: { 'X-Access-Token': accessToken } });
+      const txt = await res.text();
+      if (res.status === 404) {
+        setListOut(`❌ No conference records found for space: ${resolvedSpace}\n\n⚠️ IMPORTANT: After 30+ minutes, if records don't appear, check:\n\n1. ✅ VERIFY TRANSCRIPTION WAS ENABLED:\n   - Open the meeting recording/transcript in Gmail\n   - Confirm transcription/notes exist\n   - If NO transcript visible → transcription wasn't enabled\n\n2. ✅ VERIFY SPACE NAME:\n   - Current space: ${resolvedSpace}\n   - Check if this matches the actual meeting\n   - Get space name from meeting URL or recording link\n\n3. ✅ CHECK PERMISSIONS:\n   - Your account must have access to the meeting\n   - OAuth scopes: meetings.space.readonly\n   - Try re-authorizing with fresh token\n\n4. 🔍 ALTERNATIVE: If transcript exists in Gmail/Drive:\n   - Conference records might not be created via API\n   - Transcripts might only be in Google Docs\n   - API access may require different permissions\n\n💡 DEBUGGING: Check browser console/network tab for actual API response.`);
+      } else if (res.ok) {
+        const data = JSON.parse(txt);
+        if (data.conferenceRecords && data.conferenceRecords.length > 0) {
+          setListOut(data);
+        } else {
+          setListOut('Conference records list is empty for this space.');
+        }
+      } else {
+        setListOut(`Error ${res.status}: ${txt.substring(0, 500)}`);
+      }
+    }
+    document.getElementById('listRecordsBtn').addEventListener('click', listConferenceRecordsForSpace);
+
+    async function listTranscriptsFromLatestRecord() {
+      // First list records
+      const spaceName = getField('spaceName') || LOG.spaceNameResolved || '';
+      if (!spaceName) { setListOut('Enter a space name or connect first.'); return; }
+      const recordRes = await fetch(`http://localhost:8787/api/conferenceRecords?spaceName=${encodeURIComponent(spaceName.startsWith('spaces/') ? spaceName : await resolveSpaceName(spaceName))}`, { headers: { 'X-Access-Token': accessToken } });
+      const recordJson = recordRes.ok ? await recordRes.json() : null;
+      if (!recordJson || !recordJson.conferenceRecords || recordJson.conferenceRecords.length === 0) { setListOut('No conference records found.'); return; }
+      const latestRecord = recordJson.conferenceRecords[0].name;
+      const res = await fetch(`http://localhost:8787/api/transcripts?conferenceRecord=${encodeURIComponent(latestRecord)}`, { headers: { 'X-Access-Token': accessToken } });
+      const txt = await res.text();
+      setListOut(res.ok ? JSON.parse(txt) : `Error ${res.status}: ${txt}`);
+    }
+    document.getElementById('listTranscriptsBtn').addEventListener('click', listTranscriptsFromLatestRecord);
+
+    async function listEntriesFromLatestTranscript() {
+      // List records
+      const spaceName = getField('spaceName') || LOG.spaceNameResolved || '';
+      if (!spaceName) { setListOut('Enter a space name or connect first.'); return; }
+      const recordRes = await fetch(`http://localhost:8787/api/conferenceRecords?spaceName=${encodeURIComponent(spaceName.startsWith('spaces/') ? spaceName : await resolveSpaceName(spaceName))}`, { headers: { 'X-Access-Token': accessToken } });
+      const recordJson = recordRes.ok ? await recordRes.json() : null;
+      if (!recordJson || !recordJson.conferenceRecords || recordJson.conferenceRecords.length === 0) { setListOut('No conference records found.'); return; }
+      const latestRecord = recordJson.conferenceRecords[0].name;
+
+      // List transcripts
+      const transcriptsRes = await fetch(`http://localhost:8787/api/transcripts?conferenceRecord=${encodeURIComponent(latestRecord)}`, { headers: { 'X-Access-Token': accessToken } });
+      const transcriptsJson = transcriptsRes.ok ? await transcriptsRes.json() : null;
+      if (!transcriptsJson || !transcriptsJson.transcripts || transcriptsJson.transcripts.length === 0) { setListOut('No transcripts found.'); return; }
+      const latestTranscript = transcriptsJson.transcripts[0].name;
+
+      // List entries
+      const entriesRes = await fetch(`http://localhost:8787/api/transcripts/entries?transcript=${encodeURIComponent(latestTranscript)}`, { headers: { 'X-Access-Token': accessToken } });
+      const entriesTxt = await entriesRes.text();
+      setListOut(entriesRes.ok ? JSON.parse(entriesTxt) : `Error ${entriesRes.status}: ${entriesTxt}`);
+    }
+    document.getElementById('listEntriesBtn').addEventListener('click', listEntriesFromLatestTranscript);
+
+    // Function to extract text from Google Docs API response
+    function extractTextFromDocs(body) {
+      if (!body.content) return 'No content found';
+      let text = '';
+      function traverse(elements) {
+        if (!elements) return;
+        for (const element of elements) {
+          if (element.paragraph) {
+            const paragraph = element.paragraph;
+            if (paragraph.elements) {
+              for (const elem of paragraph.elements) {
+                if (elem.textRun) {
+                  text += elem.textRun.content;
+                }
+              }
+            }
+          }
+          if (element.table) {
+            // Handle tables if needed
+          }
+        }
+      }
+      traverse(body.content);
+      return text || 'Could not extract text from document';
+    }
+
+    async function fetchDocTranscript() {
+      const docId = getField('docId');
+      if (!docId) {
+        document.getElementById('docTranscriptOut').textContent = 'Please enter a Google Docs document ID';
+        return;
+      }
+      try {
+        const url = `http://localhost:8787/api/docs/transcript?documentId=${encodeURIComponent(docId)}`;
+        const res = await fetch(url, { headers: { 'X-Access-Token': accessToken } });
+        const txt = await res.text();
+        if (res.ok) {
+          const data = JSON.parse(txt);
+          const extractedText = extractTextFromDocs(data.body || data);
+          document.getElementById('docTranscriptOut').textContent = extractedText || JSON.stringify(data, null, 2);
+          log('Successfully fetched transcript from Google Docs');
+        } else {
+          document.getElementById('docTranscriptOut').textContent = `Error ${res.status}: ${txt.substring(0, 500)}`;
+          log('Failed to fetch Google Docs transcript:', res.status);
+        }
+      } catch (e) {
+        document.getElementById('docTranscriptOut').textContent = `Error: ${e && e.message ? e.message : e}`;
+        log('Error fetching Google Docs transcript:', e);
+      }
+    }
+    document.getElementById('getDocTranscriptBtn').addEventListener('click', fetchDocTranscript);
+  </script>
+</body>

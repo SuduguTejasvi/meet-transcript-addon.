@@ -70,6 +70,7 @@ export class SecureCredentialManager {
           cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER || '409997382473',
           deepgramApiKey: process.env.DEEPGRAM_API_KEY || '306114cbf5e0f315e34cc259af3d16b9fe000992',
           attendeeApiKey: process.env.ATTENDEE_API_KEY || 'FMviPsiy3HSqx50aA51S4cFuTx868JBB',
+          proxyUrl: process.env.MEET_PROXY_URL || 'http://localhost:8787', // Default to meet-proxy.js server
           mainStageUrl: process.env.MAIN_STAGE_URL || window.location.origin + '/mainstage.html',
           sidePanelUrl: process.env.SIDE_PANEL_URL || window.location.origin + '/sidepanel.html',
           eventsBackendUrl: process.env.EVENTS_BACKEND_URL || null,
@@ -188,10 +189,11 @@ export class SecureCredentialManager {
       // In browser mode, return only the credentials we have
       if (this.isBrowserMode) {
         return {
-          cloudProjectNumber: this.credentials.cloudProjectNumber,
-          deepgramApiKey: this.credentials.deepgramApiKey,
-          attendeeApiKey: this.credentials.attendeeApiKey,
-          mainStageUrl: this.credentials.mainStageUrl,
+        cloudProjectNumber: this.credentials.cloudProjectNumber,
+        deepgramApiKey: this.credentials.deepgramApiKey,
+        attendeeApiKey: this.credentials.attendeeApiKey,
+        proxyUrl: this.credentials.proxyUrl,
+        mainStageUrl: this.credentials.mainStageUrl,
           sidePanelUrl: this.credentials.sidePanelUrl,
           nodeEnv: this.credentials.nodeEnv,
           logLevel: this.credentials.logLevel,

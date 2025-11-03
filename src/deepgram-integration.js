@@ -177,10 +177,9 @@ export class AudioCapture {
       console.log('⚠️ Direct microphone access not available in Meet Add-ons iframe');
       console.log('📋 Microphone capture would require Meet Media API with Developer Preview');
       
-      // For now, we'll simulate audio processing
-      this.simulateAudioProcessing();
+      // Audio processing will be handled by Google Meet API or real audio streams
       
-      console.log('✅ Microphone capture simulation started');
+      console.log('✅ Microphone capture initialized');
       
     } catch (error) {
       console.error('Error starting microphone capture:', error);
@@ -188,22 +187,6 @@ export class AudioCapture {
     }
   }
 
-  /**
-   * Simulate audio processing for demonstration
-   */
-  simulateAudioProcessing() {
-    // Simulate audio data every 100ms
-    this.audioSimulationInterval = setInterval(() => {
-      if (this.onAudioData) {
-        // Generate random audio data for simulation
-        const audioData = new Int16Array(1024);
-        for (let i = 0; i < audioData.length; i++) {
-          audioData[i] = Math.floor(Math.random() * 32767 - 16383);
-        }
-        this.onAudioData(audioData, 'simulation');
-      }
-    }, 100);
-  }
 
   /**
    * Start capturing audio from Meet participants
@@ -352,7 +335,7 @@ export class MeetParticipantManager {
       // Set up event handlers for participant events
       this.setupRealParticipantEventHandlers();
       
-      // Get current participants from the meeting (now uses simulated data)
+      // Get current participants from the meeting
       const currentParticipants = await this.meetMediaAPI.getCurrentParticipants();
       
       // Process each participant
@@ -361,13 +344,12 @@ export class MeetParticipantManager {
       });
       
       this.isInitialized = true;
-      console.log('✅ Google Meet participant tracking initialized with simulated data');
+      console.log('✅ Google Meet participant tracking initialized');
       
     } catch (error) {
       console.error('❌ Failed to initialize participant tracking:', error);
-      // Fallback to mock data if real integration fails
-      console.log('Falling back to mock participant data...');
-      this.simulateParticipants();
+      // No fallback - participants will be empty if API fails
+      console.log('No participants available - API integration failed');
     }
   }
 
@@ -466,31 +448,6 @@ export class MeetParticipantManager {
     }
   }
 
-  /**
-   * Simulate participants for demonstration (fallback)
-   */
-  simulateParticipants() {
-    const mockParticipants = [
-      { id: 'user1', name: 'John Doe', avatar: '👨‍💼', isLocal: true },
-      { id: 'user2', name: 'Jane Smith', avatar: '👩‍💼', isLocal: false },
-      { id: 'user3', name: 'Bob Johnson', avatar: '👨‍🔬', isLocal: false },
-      { id: 'user4', name: 'Alice Brown', avatar: '👩‍🎨', isLocal: false }
-    ];
-
-    mockParticipants.forEach(participant => {
-      this.participants.set(participant.id, {
-        ...participant,
-        transcript: '',
-        isSpeaking: false,
-        lastSpoke: null,
-        confidence: 0
-      });
-    });
-
-    if (this.onParticipantChange) {
-      this.onParticipantChange(Array.from(this.participants.values()));
-    }
-  }
 
   /**
    * Get participant by ID

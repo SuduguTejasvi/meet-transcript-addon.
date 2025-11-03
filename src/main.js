@@ -2,6 +2,7 @@ import { meet } from '@googleworkspace/meet-addons/meet.addons';
 import { DeepgramTranscriber, AudioCapture, TranscriptionManager } from './deepgram-integration.js';
 import { MeetMediaAPI } from './meet-media-api.js';
 import { AttendeeIntegration } from './attendee-integration.js';
+import { GoogleMeetTranscriptAPI } from './google-meet-transcript-api.js';
 import { credentialManager } from './secure-credential-manager.js';
 
 // Initialize secure credential manager
@@ -18,6 +19,7 @@ let transcriptContainer;
 let isTranscribing = false;
 let transcriptionManager = null;
 let attendeeIntegration = null;
+let googleMeetTranscriptAPI = null;
 let meetMediaAPI = null;
 
 /**
@@ -160,57 +162,36 @@ function sendAudioToDeepgram(speakerAudioData) {
 }
 
 /**
- * Initialize Attendee.ai integration for live transcription
+ * Initialize Google Meet Transcript API for live transcription
  */
-function initializeAttendeeIntegration() {
-  console.log('Initializing Attendee.ai integration...');
+function initializeGoogleMeetTranscriptAPI() {
+  console.log('Initializing Google Meet Transcript API...');
   
   try {
-    // Ensure credentials are initialized
-    if (!attendeeApiKey) {
-      console.warn('Attendee.ai API key not found. Please set ATTENDEE_API_KEY environment variable.');
-      showStatus('Attendee.ai API key not configured', 'error');
-      return;
-    }
-    
-    // Create Attendee.ai integration instance with Meet clients for better URL detection
-    attendeeIntegration = new AttendeeIntegration(attendeeApiKey, credentials, {
-      sidePanelClient: sidePanelClient,
-      mainStageClient: mainStageClient
-    });
+    // Create Google Meet Transcript API instance
+    googleMeetTranscriptAPI = new GoogleMeetTranscriptAPI(credentials);
     
     // Set up event handlers
-    attendeeIntegration.onTranscriptUpdate = (entry) => {
-      handleAttendeeTranscriptUpdate(entry);
+    googleMeetTranscriptAPI.onTranscriptUpdate = (entry) => {
+      handleGoogleMeetTranscriptUpdate(entry);
     };
     
-    attendeeIntegration.onBotStatusChange = (status) => {
-      console.log('Bot status changed:', status);
-      if (status.status === 'created') {
-        showStatus('Attendee.ai bot created successfully', 'success');
-      } else if (status.status === 'active') {
-        showStatus('Live transcription active', 'success');
-      } else if (status.status === 'stopped') {
-        showStatus('Transcription stopped', 'info');
-      }
+    googleMeetTranscriptAPI.onError = (error) => {
+      console.error('Google Meet Transcript API error:', error);
+      showStatus('Transcript API error: ' + error.message, 'error');
     };
     
-    attendeeIntegration.onError = (error) => {
-      console.error('Attendee.ai error:', error);
-      showStatus('Attendee.ai error: ' + error.message, 'error');
-    };
-    
-    console.log('✅ Attendee.ai integration initialized successfully');
+    console.log('✅ Google Meet Transcript API initialized successfully');
   } catch (error) {
-    console.error('Error initializing Attendee.ai:', error);
-    showStatus('Error initializing Attendee.ai: ' + error.message, 'error');
+    console.error('Error initializing Google Meet Transcript API:', error);
+    showStatus('Error initializing Transcript API: ' + error.message, 'error');
   }
 }
 
 /**
- * Handle real-time transcript updates from Attendee.ai
+ * Handle real-time transcript updates from Google Meet API
  */
-function handleAttendeeTranscriptUpdate(entry) {
+function handleGoogleMeetTranscriptUpdate(entry) {
   const { speakerName, transcription, timestamp, duration } = entry;
   
   if (transcription && transcription.trim()) {
@@ -321,8 +302,8 @@ export async function setUpAddon() {
       stopTranscriptBtn.addEventListener('click', stopTranscript);
     }
     
-    // Initialize Attendee.ai integration after clients are set up
-    initializeAttendeeIntegration();
+    // Initialize Google Meet Transcript API after clients are set up
+    initializeGoogleMeetTranscriptAPI();
     
     console.log('Add-on initialized successfully');
     showStatus('Add-on loaded successfully!', 'success');
@@ -616,15 +597,15 @@ function updateParticipantDisplay() {
 }
 
 /**
- * Start transcript functionality using Attendee.ai
+ * Start transcript functionality using Google Meet API
  */
 async function startTranscript() {
-  console.log('Starting transcript with Attendee.ai...');
+  console.log('Starting transcript with Google Meet API...');
   
   try {
-    // Check if Attendee.ai integration is initialized
-    if (!attendeeIntegration) {
-      throw new Error('Attendee.ai integration not initialized. Please check your API key configuration.');
+    // Check if Google Meet Transcript API is initialized
+    if (!googleMeetTranscriptAPI) {
+      throw new Error('Google Meet Transcript API not initialized.');
     }
     
     // Update UI
@@ -635,7 +616,20 @@ async function startTranscript() {
     const meetingUrlInput = document.getElementById('meeting-url-input');
     
     // Check if we need manual URL entry
-    const meetingUrl = meetingUrlInput?.value?.trim();
+    let meetingCodeOrUrl = meetingUrlInput?.value?.trim();
+    
+    // If no manual URL, try to get from Meet session
+    if (!meetingCodeOrUrl) {
+      meetingCodeOrUrl = await getMeetingCodeFromSession();
+    }
+    
+    if (!meetingCodeOrUrl) {
+      // Show manual input
+      if (meetingUrlContainer) {
+        meetingUrlContainer.style.display = 'block';
+      }
+      throw new Error('Could not detect meeting code. Please enter it manually.');
+    }
     
     if (startBtn) startBtn.disabled = true;
     if (stopBtn) stopBtn.disabled = false;
@@ -643,13 +637,14 @@ async function startTranscript() {
       status.style.display = 'block';
       status.style.background = '#e8f0fe';
       status.style.color = '#1a73e8';
-      status.textContent = '🔄 Creating bot and starting transcription...';
+      status.textContent = '🔄 Connecting to Google Meet API and starting transcription...';
     }
     
-    // Start Attendee.ai transcription
-    // This will create a bot and start polling for transcripts
-    // Pass manual URL if provided
-    await attendeeIntegration.startTranscription(meetingUrl || null);
+    // Get access token from Meet session
+    const accessToken = await getAccessTokenFromSession();
+    
+    // Start Google Meet transcript API
+    await googleMeetTranscriptAPI.startTranscription(meetingCodeOrUrl, accessToken);
     
     // Hide manual input if successful
     if (meetingUrlContainer) meetingUrlContainer.style.display = 'none';
@@ -659,17 +654,17 @@ async function startTranscript() {
     if (status) {
       status.style.background = '#e8f5e8';
       status.style.color = '#137333';
-      status.textContent = '🎤 Live transcription active - receiving transcripts from Attendee.ai';
+      status.textContent = '🎤 Live transcription active - receiving transcripts from Google Meet API';
     }
     
-    console.log('✅ Transcription started successfully with Attendee.ai');
+    console.log('✅ Transcription started successfully with Google Meet API');
     
   } catch (error) {
     console.error('Error starting transcription:', error);
     showStatus('Error starting transcription: ' + error.message, 'error');
     
     // Show manual input if URL detection failed
-    if (error.message.includes('Could not detect meeting URL') || error.message.includes('meeting URL')) {
+    if (error.message.includes('Could not detect') || error.message.includes('meeting code')) {
       const meetingUrlContainer = document.getElementById('meeting-url-input-container');
       if (meetingUrlContainer) {
         meetingUrlContainer.style.display = 'block';
@@ -692,15 +687,78 @@ async function startTranscript() {
 }
 
 /**
+ * Get meeting code from Meet session
+ */
+async function getMeetingCodeFromSession() {
+  try {
+    // Try from sidePanelClient
+    if (sidePanelClient) {
+      const meetingInfo = await sidePanelClient.getMeetingInfo?.();
+      if (meetingInfo?.meetingCode) {
+        return meetingInfo.meetingCode;
+      }
+      if (meetingInfo?.meetingUrl) {
+        return meetingInfo.meetingUrl;
+      }
+    }
+    
+    // Try from credentials.meetSession
+    if (credentials?.meetSession) {
+      const meetingInfo = await credentials.meetSession.getMeetingInfo?.();
+      if (meetingInfo?.meetingCode) {
+        return meetingInfo.meetingCode;
+      }
+      if (meetingInfo?.meetingUrl) {
+        return meetingInfo.meetingUrl;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('Error getting meeting code from session:', error);
+    return null;
+  }
+}
+
+/**
+ * Get access token from Meet session
+ */
+async function getAccessTokenFromSession() {
+  try {
+    // In Google Meet Add-ons, the platform should provide authentication
+    // For now, we'll need to get the token from the session or credentials
+    // This may need to be implemented based on your authentication setup
+    
+    // Check if token is in credentials
+    if (credentials?.accessToken) {
+      return credentials.accessToken;
+    }
+    
+    // Try to get from Meet session (platform may provide this)
+    if (credentials?.meetSession?.getAccessToken) {
+      const tokenData = await credentials.meetSession.getAccessToken();
+      return tokenData?.token || tokenData;
+    }
+    
+    // Fallback: return null and let the API handle authentication
+    console.warn('Access token not found. API calls may fail without proper authentication.');
+    return null;
+  } catch (error) {
+    console.warn('Error getting access token:', error);
+    return null;
+  }
+}
+
+/**
  * Stop transcript functionality
  */
 async function stopTranscript() {
   console.log('Stopping transcript...');
   
   try {
-    // Stop Attendee.ai transcription
-    if (attendeeIntegration && isTranscribing) {
-      await attendeeIntegration.stopTranscription();
+    // Stop Google Meet transcript API
+    if (googleMeetTranscriptAPI && isTranscribing) {
+      await googleMeetTranscriptAPI.stopTranscription();
     }
     
     isTranscribing = false;
