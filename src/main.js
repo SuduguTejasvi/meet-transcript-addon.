@@ -192,67 +192,17 @@ function initializeGoogleMeetTranscriptAPI() {
  * Handle real-time transcript updates from Google Meet API
  */
 function handleGoogleMeetTranscriptUpdate(entry) {
-  const { speakerName, transcription, timestamp, duration } = entry;
-  
-  if (transcription && transcription.trim()) {
-    // Find or create participant by speaker name
-    let participant = null;
-    
-    // Try to find existing participant by name
-    for (const [id, p] of participants.entries()) {
-      if (p.name === speakerName || p.name.toLowerCase() === speakerName.toLowerCase()) {
-        participant = p;
-        break;
-      }
-    }
-    
-    // If participant not found, create a new one
-    if (!participant) {
-      participant = {
-        id: `speaker_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        name: speakerName,
-        email: '',
-        isLocal: false,
-        isSpeaking: true,
-        avatar: '👤',
-        transcript: '',
-        lastSpoke: null,
-        joinedAt: new Date().toISOString(),
-        entries: [] // Store individual transcript entries
-      };
-      participants.set(participant.id, participant);
-    }
-    
-    // Add new transcript entry
-    const transcriptEntry = {
-      text: transcription,
-      timestamp: timestamp,
-      duration: duration,
-      timestampMs: Date.now()
-    };
-    
-    if (!participant.entries) {
-      participant.entries = [];
-    }
-    participant.entries.push(transcriptEntry);
-    
-    // Update participant transcript (append new text)
-    participant.transcript += (participant.transcript ? ' ' : '') + transcription;
-        participant.isSpeaking = true;
-        participant.lastSpoke = new Date().toLocaleTimeString();
-        
-        updateParticipantDisplay();
-        
-        // Stop speaking indicator after 3 seconds
-        setTimeout(() => {
-      if (participant) {
-          participant.isSpeaking = false;
-          updateParticipantDisplay();
-      }
-        }, 3000);
-        
-    console.log(`${speakerName}: ${transcription}`);
-  }
+  const { speakerName, transcription } = entry;
+  if (!transcription || !transcription.trim()) return;
+  const container = document.getElementById('transcript-container');
+  if (!container) return;
+  const line = document.createElement('div');
+  const speaker = speakerName || 'Speaker';
+  line.textContent = `${speaker}: ${transcription}`;
+  line.style.color = entry.isFinal === false ? '#555' : '#111';
+  line.style.fontStyle = entry.isFinal === false ? 'italic' : 'normal';
+  container.appendChild(line);
+  container.scrollTop = container.scrollHeight;
 }
 
 /**
@@ -1249,6 +1199,8 @@ async function stopTranscript() {
       status.style.color = '#d93025';
       status.textContent = '⏹️ Transcription stopped';
     }
+    const tc = document.getElementById('transcript-container');
+    if (tc) tc.innerHTML = '';
     
     console.log('✅ Transcription stopped successfully');
     
