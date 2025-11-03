@@ -1,7 +1,7 @@
 // Minimal proxy to call Google Meet Media API from server to avoid browser CORS
 
-const express = require('express');
-const cors = require('cors');
+import express from 'express';
+import cors from 'cors';
 // Using Node 18+ built-in fetch (no need for node-fetch)
 
 const app = express();

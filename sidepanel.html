@@ -271,21 +271,7 @@
                 🚀 Start Activity
             </button>
             <div id="auth-token-input-container" style="display: none; margin-bottom: 10px; background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
-                <label for="auth-token-input" style="display: block; margin-bottom: 8px; font-size: 14px; color: #856404; font-weight: 500;">
-                    🔐 Google OAuth Access Token Required:
-                </label>
-                <input type="password" id="auth-token-input" placeholder="Enter your Google OAuth access token..." 
-                       style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; margin-bottom: 8px;">
-                <div style="font-size: 12px; color: #856404; margin-bottom: 10px;">
-                    <strong>How to get access token:</strong><br>
-                    1. Go to <a href="https://console.cloud.google.com/" target="_blank" style="color: #1a73e8;">Google Cloud Console</a><br>
-                    2. Enable Google Meet API<br>
-                    3. Create OAuth 2.0 credentials<br>
-                    4. Use OAuth 2.0 Playground or generate token
-                </div>
-                <button id="save-auth-token" class="btn btn-success" style="width: 100%;">
-                    Save Token & Continue
-                </button>
+                <!-- OAuth UI will be dynamically inserted here -->
             </div>
             <div id="meeting-url-input-container" style="display: none; margin-bottom: 10px;">
                 <label for="meeting-url-input" style="display: block; margin-bottom: 5px; font-size: 14px; color: #5f6368;">
@@ -320,6 +306,9 @@
         </div>
     </div>
 
+    <!-- Google Identity Services for OAuth -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
     <script type="module">
         // Set environment variables for the add-on
         window.process = window.process || {};

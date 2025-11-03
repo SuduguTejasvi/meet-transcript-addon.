@@ -803,26 +803,43 @@ async function getAccessTokenFromSession() {
       return credentials.accessToken;
     }
     
-    // Method 5: Try to use Google Identity Services (gapi) if available
-    if (window.gapi && window.gapi.auth2) {
+    // Method 5: Try to use Google Identity Services (OAuth 2.0) - GSI
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
       try {
-        const authInstance = window.gapi.auth2.getAuthInstance();
-        if (authInstance && authInstance.isSignedIn.get()) {
-          const user = authInstance.currentUser.get();
-          const authResponse = user.getAuthResponse(true);
-          if (authResponse && authResponse.access_token) {
-            console.log('✅ Got access token from Google Identity Services');
-            return authResponse.access_token;
-          }
+        const token = await authorizeWithGoogleOAuth();
+        if (token) {
+          console.log('✅ Got access token from Google OAuth');
+          return token;
         }
       } catch (err) {
-        console.warn('Error getting token from gapi:', err);
+        console.warn('Error getting token from Google OAuth:', err);
       }
     }
     
-    // If no token found, prompt user to authenticate
-    console.warn('⚠️ Access token not found. Prompting user for authentication...');
-    const token = await promptForAccessToken();
+    // If GSI not loaded yet, try to load it and then authenticate
+    if (!window.google || !window.google.accounts) {
+      console.log('Loading Google Identity Services...');
+      await loadGoogleIdentityServices();
+      
+      // Wait a bit for GSI to initialize
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+        try {
+          const token = await authorizeWithGoogleOAuth();
+          if (token) {
+            console.log('✅ Got access token from Google OAuth');
+            return token;
+          }
+        } catch (err) {
+          console.warn('Error getting token from Google OAuth:', err);
+        }
+      }
+    }
+    
+    // If no token found, show OAuth UI prompt
+    console.warn('⚠️ Access token not found. Starting OAuth flow...');
+    const token = await promptForOAuthAuthorization();
     return token;
     
   } catch (error) {
@@ -833,22 +850,197 @@ async function getAccessTokenFromSession() {
 }
 
 /**
- * Prompt user to enter access token manually via UI
+ * Load Google Identity Services script
  */
-async function promptForAccessToken() {
+function loadGoogleIdentityServices() {
   return new Promise((resolve) => {
-    // Show UI input for access token
+    if (window.google && window.google.accounts) {
+      resolve();
+      return;
+    }
+    
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      console.log('Google Identity Services loaded');
+      resolve();
+    };
+    script.onerror = () => {
+      console.warn('Failed to load Google Identity Services');
+      resolve(); // Resolve anyway to continue
+    };
+    document.head.appendChild(script);
+  });
+}
+
+/**
+ * Authorize using Google OAuth 2.0 (Google Identity Services)
+ */
+async function authorizeWithGoogleOAuth() {
+  return new Promise((resolve, reject) => {
+    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+      reject(new Error('Google Identity Services not available'));
+      return;
+    }
+    
+    const clientId = credentials?.oauthClientId || '409997382473-c9kq9iijvgibd139ngrg8acitiip22vl.apps.googleusercontent.com';
+    if (!clientId) {
+      reject(new Error('OAuth Client ID not configured'));
+      return;
+    }
+    
+    const SCOPES = [
+      'https://www.googleapis.com/auth/meetings.space.readonly',
+      'https://www.googleapis.com/auth/meetings.conference.media.audio.readonly',
+      'https://www.googleapis.com/auth/documents.readonly'
+    ];
+    
+    try {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPES.join(' '),
+        callback: (resp) => {
+          if (resp && resp.access_token) {
+            const token = resp.access_token;
+            console.log('✅ OAuth access token acquired');
+            // Store token in credentials for future use
+            if (credentials) {
+              credentials.accessToken = token;
+            }
+            resolve(token);
+          } else {
+            reject(new Error('Failed to get access token from OAuth'));
+          }
+        },
+        error_callback: (err) => {
+          console.error('OAuth error:', err);
+          reject(new Error(err.message || 'OAuth authorization failed'));
+        }
+      });
+      
+      // Request access token (prompts user for consent)
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Prompt user to authorize via OAuth (shows UI)
+ */
+async function promptForOAuthAuthorization() {
+  return new Promise((resolve) => {
+    // Show OAuth UI instead of manual token input
     const authContainer = document.getElementById('auth-token-input-container');
     const authInput = document.getElementById('auth-token-input');
-    const saveBtn = document.getElementById('save-auth-token');
     
-    if (!authContainer || !authInput || !saveBtn) {
-      // Fallback to browser prompt if UI elements don't exist
-      const message = 'Google Meet API requires an access token.\n\nEnter your Google OAuth access token:';
+    if (authContainer) {
+      // Update the UI to show OAuth button instead
+      authContainer.innerHTML = `
+        <div style="margin-bottom: 10px;">
+          <strong style="color: #856404;">🔐 Google OAuth Authorization Required</strong>
+        </div>
+        <div style="font-size: 12px; color: #856404; margin-bottom: 15px;">
+          Click the button below to authorize with Google. This will open a popup to grant permissions.
+        </div>
+        <button id="oauth-authorize-btn" class="btn btn-success" style="width: 100%; background: #4285f4;">
+          🔐 Authorize with Google
+        </button>
+        <div style="font-size: 11px; color: #856404; margin-top: 10px; text-align: center;">
+          Or <a href="#" id="manual-token-link" style="color: #1a73e8;">enter token manually</a>
+        </div>
+      `;
+      authContainer.style.display = 'block';
+      
+      // Handle OAuth authorize button
+      const oauthBtn = document.getElementById('oauth-authorize-btn');
+      const manualLink = document.getElementById('manual-token-link');
+      
+      if (oauthBtn) {
+        oauthBtn.addEventListener('click', async () => {
+          oauthBtn.disabled = true;
+          oauthBtn.textContent = '⏳ Authorizing...';
+          
+          try {
+            // Load GSI if not loaded
+            await loadGoogleIdentityServices();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Try to authorize
+            const token = await authorizeWithGoogleOAuth();
+            if (token) {
+              authContainer.style.display = 'none';
+              resolve(token);
+            } else {
+              throw new Error('Authorization failed');
+            }
+          } catch (error) {
+            console.error('OAuth authorization error:', error);
+            oauthBtn.disabled = false;
+            oauthBtn.textContent = '🔐 Authorize with Google';
+            alert('Authorization failed: ' + (error.message || 'Unknown error'));
+            // Fall back to manual entry
+            if (manualLink) manualLink.click();
+          }
+        });
+      }
+      
+      if (manualLink) {
+        manualLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          // Show manual input
+          authContainer.innerHTML = `
+            <label for="auth-token-input" style="display: block; margin-bottom: 8px; font-size: 14px; color: #856404; font-weight: 500;">
+              🔐 Google OAuth Access Token (Manual Entry):
+            </label>
+            <input type="password" id="auth-token-input" placeholder="Enter your Google OAuth access token..." 
+                   style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; margin-bottom: 8px;">
+            <div style="font-size: 12px; color: #856404; margin-bottom: 10px;">
+              <strong>How to get access token:</strong><br>
+              1. Go to <a href="https://console.cloud.google.com/" target="_blank" style="color: #1a73e8;">Google Cloud Console</a><br>
+              2. Enable Google Meet API<br>
+              3. Create OAuth 2.0 credentials<br>
+              4. Use OAuth 2.0 Playground or generate token
+            </div>
+            <button id="save-auth-token" class="btn btn-success" style="width: 100%;">
+              Save Token & Continue
+            </button>
+          `;
+          
+          const manualAuthInput = document.getElementById('auth-token-input');
+          const manualSaveBtn = document.getElementById('save-auth-token');
+          
+          if (manualSaveBtn && manualAuthInput) {
+            const handleManualSave = () => {
+              const token = manualAuthInput.value.trim();
+              if (token) {
+                if (credentials) {
+                  credentials.accessToken = token;
+                }
+                authContainer.style.display = 'none';
+                resolve(token);
+              } else {
+                alert('Please enter a valid access token');
+              }
+            };
+            
+            manualSaveBtn.addEventListener('click', handleManualSave);
+            manualAuthInput.addEventListener('keypress', (e) => {
+              if (e.key === 'Enter') handleManualSave();
+            });
+            manualAuthInput.focus();
+          }
+        });
+      }
+    } else {
+      // Fallback to browser prompt if UI doesn't exist
+      const message = 'Google Meet API requires OAuth authorization.\n\nEnter your Google OAuth access token:';
       try {
         const token = prompt(message);
         if (token && token.trim()) {
-          console.log('✅ Using manually entered access token');
           if (credentials) {
             credentials.accessToken = token.trim();
           }
@@ -859,47 +1051,16 @@ async function promptForAccessToken() {
       } catch (err) {
         resolve(null);
       }
-      return;
     }
-    
-    // Show the auth container
-    authContainer.style.display = 'block';
-    authInput.value = ''; // Clear any previous value
-    authInput.focus();
-    
-    // Handle save button click
-    const handleSave = () => {
-      const token = authInput.value.trim();
-      if (token) {
-        console.log('✅ Using manually entered access token');
-        // Store it in credentials for future use
-        if (credentials) {
-          credentials.accessToken = token;
-        }
-        // Hide the container
-        authContainer.style.display = 'none';
-        // Remove event listeners
-        saveBtn.removeEventListener('click', handleSave);
-        authInput.removeEventListener('keypress', handleEnter);
-        resolve(token);
-      } else {
-        alert('Please enter a valid access token');
-      }
-    };
-    
-    // Handle Enter key
-    const handleEnter = (e) => {
-      if (e.key === 'Enter') {
-        handleSave();
-      }
-    };
-    
-    saveBtn.addEventListener('click', handleSave);
-    authInput.addEventListener('keypress', handleEnter);
-    
-    // Also allow clicking outside to cancel (optional)
-    // For now, we'll require them to enter a token
   });
+}
+
+/**
+ * Prompt user to enter access token manually via UI (deprecated - use OAuth instead)
+ */
+async function promptForAccessToken() {
+  // Redirect to OAuth flow
+  return await promptForOAuthAuthorization();
 }
 
 /**

@@ -75,7 +75,8 @@ export class GoogleMeetTranscriptAPI {
         throw new Error('Access token not available');
       }
 
-      const baseUrl = this.proxyUrl || window.location.origin;
+      // Use proxy URL - default to localhost:8787 where meet-proxy.js runs
+      const baseUrl = this.proxyUrl || 'http://localhost:8787';
       const url = `${baseUrl}/api/lookupSpace?meetingCode=${encodeURIComponent(meetingCode)}`;
       
       console.log('Looking up space for meeting code:', meetingCode);
@@ -113,7 +114,8 @@ export class GoogleMeetTranscriptAPI {
         throw new Error('Access token not available');
       }
 
-      const baseUrl = this.proxyUrl || window.location.origin;
+      // Use proxy URL - default to localhost:8787 where meet-proxy.js runs
+      const baseUrl = this.proxyUrl || 'http://localhost:8787';
       const url = `${baseUrl}/api/conferenceRecords?spaceName=${encodeURIComponent(spaceName)}`;
       
       console.log('Fetching conference records for space:', spaceName);
@@ -151,7 +153,8 @@ export class GoogleMeetTranscriptAPI {
         throw new Error('Access token not available');
       }
 
-      const baseUrl = this.proxyUrl || window.location.origin;
+      // Use proxy URL - default to localhost:8787 where meet-proxy.js runs
+      const baseUrl = this.proxyUrl || 'http://localhost:8787';
       const url = `${baseUrl}/api/transcripts?conferenceRecord=${encodeURIComponent(conferenceRecord)}`;
       
       console.log('Fetching transcripts for conference record:', conferenceRecord);
@@ -189,7 +192,8 @@ export class GoogleMeetTranscriptAPI {
         throw new Error('Access token not available');
       }
 
-      const baseUrl = this.proxyUrl || window.location.origin;
+      // Use proxy URL - default to localhost:8787 where meet-proxy.js runs
+      const baseUrl = this.proxyUrl || 'http://localhost:8787';
       const url = `${baseUrl}/api/transcripts/entries?transcript=${encodeURIComponent(transcriptName)}`;
       
       const response = await fetch(url, {
