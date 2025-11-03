@@ -589,6 +589,20 @@ export class GoogleMeetTranscriptAPI {
       if (e.track.kind === 'audio') {
         const trackId = e.track.id;
         const stream = new MediaStream([e.track]);
+        // Attach to hidden audio element to ensure playback pipeline is active
+        try {
+          const audioEl = document.createElement('audio');
+          audioEl.style.display = 'none';
+          audioEl.autoplay = true;
+          audioEl.muted = true; // prevent feedback
+          audioEl.playsInline = true;
+          audioEl.srcObject = stream;
+          document.body.appendChild(audioEl);
+          const p = audioEl.play();
+          if (p && p.catch) p.catch(() => {});
+        } catch (attachErr) {
+          console.warn('[GMTA] failed to attach audio element', attachErr);
+        }
         if (deepgramApiKey && deepgramApiKey.trim()) {
           this.startDeepgram(stream, trackId, deepgramApiKey.trim());
         } else {
@@ -637,6 +651,12 @@ export class GoogleMeetTranscriptAPI {
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          // Debug preview
+          if (data && data.type && data.type !== 'Metadata') {
+            // Log short preview once per message
+            const preview = JSON.stringify(data).slice(0, 200);
+            console.log('[GMTA] Deepgram msg', preview);
+          }
           if (data && data.channel && data.channel.alternatives && data.channel.alternatives[0]) {
             const transcript = data.channel.alternatives[0].transcript || '';
             if (transcript && this.onTranscriptUpdate) {
