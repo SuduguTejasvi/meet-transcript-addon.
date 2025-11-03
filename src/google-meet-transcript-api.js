@@ -14,6 +14,12 @@ export class GoogleMeetTranscriptAPI {
     this.conferenceRecord = null;
     this.transcript = null;
     this.lastEntryTime = null;
+
+    // Realtime (WebRTC) members
+    this.pc = null;
+    this.sessionControl = null;
+    this.mediaStats = null;
+    this.deepgramConnections = new Map();
     
     // Event handlers
     this.onTranscriptUpdate = null;
@@ -521,6 +527,25 @@ export class GoogleMeetTranscriptAPI {
       this.transcript = null;
       this.lastEntryTime = null;
 
+      // Cleanup realtime session
+      try {
+        if (this.pc) {
+          this.pc.getSenders().forEach(s => { try { s.track && s.track.stop && s.track.stop(); } catch (_) {} });
+          this.pc.getReceivers().forEach(r => { try { r.track && r.track.stop && r.track.stop(); } catch (_) {} });
+          this.pc.close();
+        }
+      } catch (_) {}
+      this.pc = null;
+      this.sessionControl = null;
+      this.mediaStats = null;
+      // Close Deepgram sockets
+      this.deepgramConnections.forEach(({ socket, mediaRecorder, audioStream }) => {
+        try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch (_) {}
+        try { audioStream && audioStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        try { socket && socket.close && socket.close(); } catch (_) {}
+      });
+      this.deepgramConnections.clear();
+
       console.log('[GMTA] ✅ Transcription stopped');
       return true;
     } catch (error) {
@@ -537,5 +562,100 @@ export class GoogleMeetTranscriptAPI {
     this.accessToken = null;
     this.onTranscriptUpdate = null;
     this.onError = null;
+  }
+
+  /**
+   * Start realtime audio via WebRTC connectActiveConference
+   */
+  async startRealtimeAudio(spaceName, accessToken, deepgramApiKey = null) {
+    if (!spaceName || !spaceName.startsWith('spaces/')) {
+      throw new Error('Invalid space name. Expected format: spaces/…');
+    }
+    this.accessToken = accessToken;
+    const baseUrl = this.proxyUrl || 'http://localhost:8787';
+    console.log('[GMTA] startRealtimeAudio', { spaceName, baseUrl });
+
+    // Create RTCPeerConnection
+    this.pc = new RTCPeerConnection({ iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] });
+    // Per Meet Media API: exactly 3 recvonly audio m-lines
+    for (let i = 0; i < 3; i++) {
+      this.pc.addTransceiver('audio', { direction: 'recvonly' });
+    }
+    this.sessionControl = this.pc.createDataChannel('session-control', { ordered: true });
+    this.mediaStats = this.pc.createDataChannel('media-stats', { ordered: true });
+
+    this.pc.ontrack = (e) => {
+      console.log('[GMTA] ontrack', e.track.kind, 'id:', e.track && e.track.id);
+      if (e.track.kind === 'audio') {
+        const trackId = e.track.id;
+        const stream = new MediaStream([e.track]);
+        if (deepgramApiKey && deepgramApiKey.trim()) {
+          this.startDeepgram(stream, trackId, deepgramApiKey.trim());
+        } else {
+          console.log('[GMTA] Deepgram API key not provided; transcription disabled for track', trackId);
+        }
+      }
+    };
+
+    const offer = await this.pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+    await this.pc.setLocalDescription(offer);
+    console.log('[GMTA] Local SDP created, sending to proxy');
+
+    const res = await fetch(`${baseUrl}/api/connectActiveConference`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-access-token': this.accessToken
+      },
+      body: JSON.stringify({ spaceName, offer: offer.sdp })
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`connectActiveConference failed: ${res.status} ${t}`);
+    }
+    const data = await res.json();
+    if (!data || !data.answer) throw new Error('No SDP answer returned by proxy');
+    await this.pc.setRemoteDescription({ type: 'answer', sdp: data.answer });
+    console.log('[GMTA] Remote SDP set; ICE connecting…');
+    this.isActive = true;
+  }
+
+  startDeepgram(audioStream, trackId, apiKey) {
+    try {
+      const mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm;codecs=opus' });
+      const url = 'wss://api.deepgram.com/v1/listen?model=nova-3&numerals=true&smart_format=true&interim_results=true';
+      const socket = new WebSocket(url, ['token', apiKey]);
+      socket.onopen = () => {
+        console.log('[GMTA] Deepgram connected for', trackId);
+        mediaRecorder.start(1000);
+        mediaRecorder.ondataavailable = (evt) => {
+          if (evt.data && evt.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+            socket.send(evt.data);
+          }
+        };
+      };
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.channel && data.channel.alternatives && data.channel.alternatives[0]) {
+            const transcript = data.channel.alternatives[0].transcript || '';
+            if (transcript && this.onTranscriptUpdate) {
+              this.onTranscriptUpdate({
+                speakerName: `Track ${trackId}`,
+                transcription: transcript,
+                isFinal: !!data.is_final,
+                confidence: 1.0,
+              });
+            }
+          }
+        } catch (_) {}
+      };
+      socket.onclose = () => {
+        try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch (_) {}
+      };
+      this.deepgramConnections.set(trackId, { socket, mediaRecorder, audioStream });
+    } catch (err) {
+      console.error('[GMTA] Deepgram start error', err);
+    }
   }
 }

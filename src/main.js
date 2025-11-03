@@ -623,6 +623,9 @@ async function startTranscript() {
     const meetingUrlContainer = document.getElementById('meeting-url-input-container');
     const meetingUrlInput = document.getElementById('meeting-url-input');
     
+    // Check if user provided space name for realtime audio
+    const spaceNameInput = document.getElementById('space-name-input');
+    const spaceName = spaceNameInput && spaceNameInput.value ? spaceNameInput.value.trim() : '';
     // Check if we need manual URL entry
     let meetingCodeOrUrl = meetingUrlInput?.value?.trim();
     
@@ -665,8 +668,14 @@ async function startTranscript() {
       }
     }
     
-    // Start Google Meet transcript API
-    await googleMeetTranscriptAPI.startTranscription(meetingCodeOrUrl, accessToken);
+    // If a valid space name provided, use realtime WebRTC path
+    if (spaceName && spaceName.startsWith('spaces/')) {
+      const deepgramKey = (credentials && credentials.deepgramApiKey) ? credentials.deepgramApiKey : (window.process && window.process.env && window.process.env.DEEPGRAM_API_KEY) || '';
+      await googleMeetTranscriptAPI.startRealtimeAudio(spaceName, accessToken, deepgramKey);
+    } else {
+      // Otherwise use REST transcript path (requires Developer Preview + APIs)
+      await googleMeetTranscriptAPI.startTranscription(meetingCodeOrUrl, accessToken);
+    }
     
     // Hide manual input if successful
     if (meetingUrlContainer) meetingUrlContainer.style.display = 'none';

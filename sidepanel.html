@@ -287,6 +287,14 @@
                 </button>
             </div>
             <div id="auth-status" style="display: none; margin-bottom: 10px; padding: 10px; border-radius: 8px; font-size: 14px;"></div>
+            <div id="space-name-input-container" style="margin-bottom: 10px;">
+                <label for="space-name-input" style="display: block; margin-bottom: 5px; font-size: 14px; color: #5f6368;">
+                    Meet space name (spaces/...):
+                </label>
+                <input type="text" id="space-name-input" placeholder="e.g., spaces/AAAA-BBBB-CCC" 
+                       style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">
+                <small style="display:block; color:#5f6368; margin-top:6px;">Tip: If provided, we'll connect via WebRTC to receive live audio (no REST transcripts needed).</small>
+            </div>
             <div id="auth-token-input-container" style="display: none; margin-bottom: 10px; background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
                 <!-- OAuth UI will be dynamically inserted here -->
             </div>
