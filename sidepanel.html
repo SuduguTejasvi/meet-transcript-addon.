@@ -267,12 +267,29 @@
         </div>
 
         <div class="controls">
-            <button id="start-activity" class="btn btn-primary">
-                🚀 Start Activity
-            </button>
+            <div id="oauth-config-container" style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #dadce0;">
+                <label for="oauth-client-id" style="display: block; margin-bottom: 8px; font-size: 14px; color: #202124; font-weight: 500;">
+                    OAuth Web Client ID:
+                </label>
+                <input type="text" id="oauth-client-id" 
+                       placeholder="YOUR_CLIENT_ID.apps.googleusercontent.com" 
+                       style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px; margin-bottom: 10px;"
+                       value="409997382473-c9kq9iijvgibd139ngrg8acitiip22vl.apps.googleusercontent.com">
+                <small style="display: block; color: #5f6368; font-size: 12px; margin-bottom: 10px;">
+                    Get your OAuth Client ID from <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: #1a73e8;">Google Cloud Console</a><br>
+                    <strong>Important:</strong> For iframe-based add-ons, ensure your OAuth Client ID has <code>https://accounts.google.com</code> as an authorized JavaScript origin in Google Cloud Console.
+                </small>
+                <button id="oauth-authorize-btn" class="btn" style="background: #4285f4; color: white; width: 100%;">
+                    🔐 Authorize
+                </button>
+            </div>
+            <div id="auth-status" style="display: none; margin-bottom: 10px; padding: 10px; border-radius: 8px; font-size: 14px;"></div>
             <div id="auth-token-input-container" style="display: none; margin-bottom: 10px; background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
                 <!-- OAuth UI will be dynamically inserted here -->
             </div>
+            <button id="start-activity" class="btn btn-primary">
+                🚀 Start Activity
+            </button>
             <div id="meeting-url-input-container" style="display: none; margin-bottom: 10px;">
                 <label for="meeting-url-input" style="display: block; margin-bottom: 5px; font-size: 14px; color: #5f6368;">
                     Meeting URL or Code:

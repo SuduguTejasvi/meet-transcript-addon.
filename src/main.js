@@ -279,6 +279,14 @@ export async function setUpAddon() {
     const startActivityBtn = document.getElementById('start-activity');
     const startTranscriptBtn = document.getElementById('start-transcript');
     const stopTranscriptBtn = document.getElementById('stop-transcript');
+    const oauthAuthorizeBtn = document.getElementById('oauth-authorize-btn');
+    
+    // Set up OAuth authorize button handler
+    if (oauthAuthorizeBtn) {
+      oauthAuthorizeBtn.addEventListener('click', async () => {
+        await handleOAuthAuthorization();
+      });
+    }
     
     if (startActivityBtn) {
       startActivityBtn.addEventListener('click', async () => {
@@ -876,16 +884,134 @@ function loadGoogleIdentityServices() {
 }
 
 /**
+ * Handle OAuth authorization from the UI button
+ */
+async function handleOAuthAuthorization() {
+  const oauthAuthorizeBtn = document.getElementById('oauth-authorize-btn');
+  const authStatus = document.getElementById('auth-status');
+  const clientIdInput = document.getElementById('oauth-client-id');
+  
+  if (!clientIdInput) {
+    showAuthStatus('Error: Client ID input field not found', 'error');
+    return;
+  }
+  
+  const clientId = clientIdInput.value.trim();
+  if (!clientId) {
+    showAuthStatus('Please enter your OAuth Web Client ID', 'error');
+    return;
+  }
+  
+  // Save client ID to credentials
+  if (credentials) {
+    credentials.oauthClientId = clientId;
+  }
+  
+  if (oauthAuthorizeBtn) {
+    oauthAuthorizeBtn.disabled = true;
+    oauthAuthorizeBtn.textContent = '⏳ Authorizing...';
+  }
+  
+  showAuthStatus('Loading Google Identity Services...', 'info');
+  
+  try {
+    // Load GSI if not already loaded
+    await loadGoogleIdentityServices();
+    
+    // Wait for GSI to initialize
+    let retries = 0;
+    while ((!window.google || !window.google.accounts || !window.google.accounts.oauth2) && retries < 10) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      retries++;
+    }
+    
+    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+      throw new Error('Google Identity Services failed to load. Please refresh the page.');
+    }
+    
+    showAuthStatus('Requesting authorization...', 'info');
+    
+    // Authorize with the client ID from the input
+    const token = await authorizeWithGoogleOAuth(clientId);
+    
+    if (token) {
+      showAuthStatus('✅ Authorization successful! Access token acquired.', 'success');
+      if (oauthAuthorizeBtn) {
+        oauthAuthorizeBtn.textContent = '✅ Authorized';
+        oauthAuthorizeBtn.style.background = '#34a853';
+      }
+      // Store token
+      if (credentials) {
+        credentials.accessToken = token;
+      }
+    } else {
+      throw new Error('Failed to get access token');
+    }
+  } catch (error) {
+    console.error('OAuth authorization error:', error);
+    showAuthStatus('❌ Authorization failed: ' + (error.message || 'Unknown error'), 'error');
+    if (oauthAuthorizeBtn) {
+      oauthAuthorizeBtn.disabled = false;
+      oauthAuthorizeBtn.textContent = '🔐 Authorize';
+      oauthAuthorizeBtn.style.background = '#4285f4';
+    }
+    
+    // Show helpful error messages
+    if (error.message && error.message.includes('redirect_uri_mismatch')) {
+      showAuthStatus('❌ Error: redirect_uri_mismatch. Please check your OAuth Client configuration in Google Cloud Console and ensure authorized JavaScript origins are set correctly.', 'error');
+    } else if (error.message && error.message.includes('popup_closed')) {
+      showAuthStatus('❌ Popup was closed. Please click Authorize again and complete the authorization in the popup window.', 'error');
+    }
+  }
+}
+
+/**
+ * Show auth status message
+ */
+function showAuthStatus(message, type = 'info') {
+  const authStatus = document.getElementById('auth-status');
+  if (authStatus) {
+    authStatus.textContent = message;
+    authStatus.style.display = 'block';
+    
+    if (type === 'success') {
+      authStatus.style.background = '#e8f5e8';
+      authStatus.style.color = '#137333';
+      authStatus.style.border = '1px solid #34a853';
+    } else if (type === 'error') {
+      authStatus.style.background = '#fce8e6';
+      authStatus.style.color = '#d93025';
+      authStatus.style.border = '1px solid #ea4335';
+    } else {
+      authStatus.style.background = '#e8f0fe';
+      authStatus.style.color = '#1a73e8';
+      authStatus.style.border = '1px solid #1a73e8';
+    }
+  }
+}
+
+/**
  * Authorize using Google OAuth 2.0 (Google Identity Services)
  */
-async function authorizeWithGoogleOAuth() {
+async function authorizeWithGoogleOAuth(clientIdOverride = null) {
   return new Promise((resolve, reject) => {
     if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
       reject(new Error('Google Identity Services not available'));
       return;
     }
     
-    const clientId = credentials?.oauthClientId || '409997382473-c9kq9iijvgibd139ngrg8acitiip22vl.apps.googleusercontent.com';
+    // Get client ID from parameter, credentials, or input field
+    let clientId = clientIdOverride;
+    if (!clientId) {
+      const clientIdInput = document.getElementById('oauth-client-id');
+      if (clientIdInput) {
+        clientId = clientIdInput.value.trim();
+      }
+    }
+    if (!clientId) {
+      clientId = credentials?.oauthClientId || '409997382473-c9kq9iijvgibd139ngrg8acitiip22vl.apps.googleusercontent.com';
+    }
+    
     if (!clientId) {
       reject(new Error('OAuth Client ID not configured'));
       return;
@@ -908,20 +1034,25 @@ async function authorizeWithGoogleOAuth() {
             // Store token in credentials for future use
             if (credentials) {
               credentials.accessToken = token;
+              credentials.oauthClientId = clientId;
             }
             resolve(token);
+          } else if (resp && resp.error) {
+            reject(new Error(resp.error + (resp.error_description ? ': ' + resp.error_description : '')));
           } else {
             reject(new Error('Failed to get access token from OAuth'));
           }
         },
         error_callback: (err) => {
           console.error('OAuth error:', err);
-          reject(new Error(err.message || 'OAuth authorization failed'));
+          const errorMessage = err.message || err.type || 'OAuth authorization failed';
+          reject(new Error(errorMessage));
         }
       });
       
       // Request access token (prompts user for consent)
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+      // Use 'select_account' prompt to avoid redirect_uri issues
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
     } catch (error) {
       reject(error);
     }
