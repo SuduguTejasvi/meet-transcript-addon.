@@ -15,6 +15,9 @@ const ALLOWED_ORIGINS = [
   'https://sudugutejasvi.github.io',
 ];
 
+// Log basic server start info and CORS config
+console.log('[Proxy] CORS allowed origins:', ALLOWED_ORIGINS);
+
 app.use(cors({
   origin: ALLOWED_ORIGINS,
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -31,6 +34,7 @@ app.use(express.json());
 
 // Root route - helpful message
 app.get('/', (req, res) => {
+  console.log('[Proxy] GET / from origin:', req.headers.origin || 'unknown');
   res.json({
     message: 'Meet API Proxy Server',
     info: 'This proxy forwards requests to Google Meet API to avoid CORS issues.',
@@ -52,6 +56,7 @@ app.get('/api/lookupSpace', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const meetingCode = (req.query.meetingCode || '').toString().trim();
+    console.log('[Proxy] /api/lookupSpace', { origin: req.headers.origin, meetingCode, hasToken: !!accessToken });
     // Do not force quota project; the working test page does not set it
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!meetingCode) return res.status(400).json({ error: 'missing_meeting_code' });
@@ -60,13 +65,19 @@ app.get('/api/lookupSpace', async (req, res) => {
     const headers = { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' };
     
     // Try v2beta first (this is what the working test flow uses), then v2
-    let upstream = await fetch(`https://meet.googleapis.com/v2beta/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}` , { headers });
+    const v2betaUrl = `https://meet.googleapis.com/v2beta/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}`;
+    console.log('[Proxy] lookup v2beta →', v2betaUrl);
+    let upstream = await fetch(v2betaUrl , { headers });
     let body = await upstream.text();
     const isHtml = body && body.trim().startsWith('<');
+    console.log('[Proxy] lookup v2beta status:', upstream.status, 'isHtml:', isHtml, 'bodyPreview:', body.substring(0,200));
     if (upstream.status === 404 || isHtml) {
       // Retry with v2
-      const retryResp = await fetch(`https://meet.googleapis.com/v2/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}` , { headers });
+      const v2Url = `https://meet.googleapis.com/v2/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}`;
+      console.log('[Proxy] lookup v2 fallback →', v2Url);
+      const retryResp = await fetch(v2Url , { headers });
       const retryBody = await retryResp.text();
+      console.log('[Proxy] lookup v2 status:', retryResp.status, 'isHtml:', retryBody.trim().startsWith('<'), 'bodyPreview:', retryBody.substring(0,200));
       if (retryResp.ok) {
         upstream = retryResp;
         body = retryBody;
@@ -82,9 +93,11 @@ app.get('/api/lookupSpace', async (req, res) => {
     try {
       res.type('application/json').send(JSON.stringify(JSON.parse(text)));
     } catch (_) {
+      console.log('[Proxy] lookup non-JSON body, sending as text');
       res.type('text/plain').send(text);
     }
   } catch (err) {
+    console.error('[Proxy] /api/lookupSpace error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
   }
 });
@@ -95,10 +108,12 @@ app.get('/api/transcripts/entry', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const name = (req.query.name || '').toString().trim();
+    console.log('[Proxy] /api/transcripts/entry', { name, hasToken: !!accessToken });
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!name) return res.status(400).json({ error: 'missing_name' });
 
     const url = `https://meet.googleapis.com/v2/${encodeURI(name)}`;
+    console.log('[Proxy] fetching entry →', url);
     const upstream = await fetch(url, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
@@ -111,6 +126,7 @@ app.get('/api/transcripts/entry', async (req, res) => {
       res.type('text/plain').send(text);
     }
   } catch (err) {
+    console.error('[Proxy] /api/transcripts/entry error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
   }
 });
@@ -121,6 +137,7 @@ app.get('/api/conferenceRecords', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const spaceName = (req.query.spaceName || '').toString().trim();
+    console.log('[Proxy] /api/conferenceRecords', { spaceName, hasToken: !!accessToken });
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!spaceName) return res.status(400).json({ error: 'missing_space_name' });
 
@@ -137,6 +154,7 @@ app.get('/api/conferenceRecords', async (req, res) => {
     try { res.type('application/json').send(JSON.stringify(JSON.parse(text))); }
     catch (_) { res.type('text/plain').send(text); }
   } catch (err) {
+    console.error('[Proxy] /api/conferenceRecords error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
   }
 });
@@ -147,16 +165,19 @@ app.get('/api/transcripts', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const conferenceRecord = (req.query.conferenceRecord || '').toString().trim();
+    console.log('[Proxy] /api/transcripts', { conferenceRecord, hasToken: !!accessToken });
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!conferenceRecord) return res.status(400).json({ error: 'missing_conference_record' });
 
     const url = `https://meet.googleapis.com/v2beta/${encodeURI(conferenceRecord)}/transcripts`;
+    console.log('[Proxy] fetching transcripts →', url);
     const upstream = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     const text = await upstream.text();
     res.status(upstream.status);
     try { res.type('application/json').send(JSON.stringify(JSON.parse(text))); }
     catch (_) { res.type('text/plain').send(text); }
   } catch (err) {
+    console.error('[Proxy] /api/transcripts error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
   }
 });
@@ -167,16 +188,19 @@ app.get('/api/transcripts/entries', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const transcript = (req.query.transcript || '').toString().trim();
+    console.log('[Proxy] /api/transcripts/entries', { transcript, hasToken: !!accessToken });
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!transcript) return res.status(400).json({ error: 'missing_transcript' });
 
     const url = `https://meet.googleapis.com/v2beta/${encodeURI(transcript)}/entries`;
+    console.log('[Proxy] fetching entries →', url);
     const upstream = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     const text = await upstream.text();
     res.status(upstream.status);
     try { res.type('application/json').send(JSON.stringify(JSON.parse(text))); }
     catch (_) { res.type('text/plain').send(text); }
   } catch (err) {
+    console.error('[Proxy] /api/transcripts/entries error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
   }
 });
@@ -185,6 +209,7 @@ app.post('/api/connectActiveConference', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const { spaceName, offer } = req.body || {};
+    console.log('[Proxy] /api/connectActiveConference', { spaceName, hasOffer: !!offer, hasToken: !!accessToken });
 
     if (!accessToken) {
       return res.status(401).json({ error: 'missing_access_token' });
@@ -198,6 +223,7 @@ app.post('/api/connectActiveConference', async (req, res) => {
     const normalizedName = decodeURIComponent(spaceName);
     const url = `https://meet.googleapis.com/v2beta/${normalizedName}:connectActiveConference`;
 
+    console.log('[Proxy] connectActiveConference →', url);
     const upstream = await fetch(url, {
       method: 'POST',
       headers: {
@@ -216,6 +242,7 @@ app.post('/api/connectActiveConference', async (req, res) => {
       res.type('text/plain').send(text);
     }
   } catch (err) {
+    console.error('[Proxy] /api/connectActiveConference error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
   }
 });
@@ -225,11 +252,13 @@ app.get('/api/verifySpace', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const spaceName = (req.query.spaceName || '').toString().trim();
+    console.log('[Proxy] /api/verifySpace', { spaceName, hasToken: !!accessToken });
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!spaceName) return res.status(400).json({ error: 'missing_space_name' });
 
     // Try to get space info to verify it exists
     const url = `https://meet.googleapis.com/v2beta/${encodeURI(spaceName)}`;
+    console.log('[Proxy] verifySpace →', url);
     const upstream = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     const text = await upstream.text();
     res.status(upstream.status);
@@ -239,6 +268,7 @@ app.get('/api/verifySpace', async (req, res) => {
       res.type('text/plain').send(text);
     }
   } catch (err) {
+    console.error('[Proxy] /api/verifySpace error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
   }
 });
@@ -249,11 +279,13 @@ app.get('/api/docs/transcript', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const documentId = (req.query.documentId || '').toString().trim();
+    console.log('[Proxy] /api/docs/transcript', { documentId, hasToken: !!accessToken });
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!documentId) return res.status(400).json({ error: 'missing_document_id' });
 
     // Use Google Docs API to get document content
     const url = `https://docs.googleapis.com/v1/documents/${encodeURIComponent(documentId)}`;
+    console.log('[Proxy] docs transcript →', url);
     const upstream = await fetch(url, {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
@@ -266,6 +298,7 @@ app.get('/api/docs/transcript', async (req, res) => {
       res.type('text/plain').send(text);
     }
   } catch (err) {
+    console.error('[Proxy] /api/docs/transcript error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
   }
 });

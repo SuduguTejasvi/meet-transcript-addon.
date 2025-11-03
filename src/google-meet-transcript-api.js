@@ -21,6 +21,9 @@ export class GoogleMeetTranscriptAPI {
     
     // Polling interval (in milliseconds) - poll every 2 seconds for real-time updates
     this.pollIntervalMs = 2000;
+    console.log('[GMTA] Constructed GoogleMeetTranscriptAPI', {
+      proxyUrl: this.proxyUrl || 'http://localhost:8787'
+    });
   }
 
   /**
@@ -28,7 +31,7 @@ export class GoogleMeetTranscriptAPI {
    */
   async initializeAuth(accessToken) {
     try {
-      console.log('Initializing Google Meet Transcript API...');
+      console.log('[GMTA] Initializing Google Meet Transcript API...');
       
       if (!accessToken) {
         throw new Error('Access token is required for Google Meet API');
@@ -36,7 +39,7 @@ export class GoogleMeetTranscriptAPI {
       
       this.accessToken = accessToken;
       
-      console.log('✅ Google Meet Transcript API initialized');
+      console.log('[GMTA] ✅ Google Meet Transcript API initialized');
       return true;
     } catch (error) {
       console.error('❌ Authentication failed:', error);
@@ -49,6 +52,7 @@ export class GoogleMeetTranscriptAPI {
    */
   async getAccessToken() {
     try {
+      console.log('[GMTA] getAccessToken');
       // Try to get access token from Meet session
       if (this.credentials?.meetSession) {
         // Meet Add-ons SDK should provide access token via platform authentication
@@ -59,7 +63,7 @@ export class GoogleMeetTranscriptAPI {
       
       return this.accessToken;
     } catch (error) {
-      console.error('Error getting access token:', error);
+      console.error('[GMTA] Error getting access token:', error);
       return null;
     }
   }
@@ -70,6 +74,7 @@ export class GoogleMeetTranscriptAPI {
    */
   async lookupSpace(meetingCode) {
     try {
+      console.log('[GMTA] lookupSpace start', { meetingCode });
       const token = await this.getAccessToken();
       if (!token) {
         throw new Error('Access token not available');
@@ -79,7 +84,7 @@ export class GoogleMeetTranscriptAPI {
       const baseUrl = this.proxyUrl || 'http://localhost:8787';
       const url = `${baseUrl}/api/lookupSpace?meetingCode=${encodeURIComponent(meetingCode)}`;
       
-      console.log('Looking up space for meeting code:', meetingCode);
+      console.log('[GMTA] Looking up space via proxy:', url);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -91,14 +96,53 @@ export class GoogleMeetTranscriptAPI {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.warn('[GMTA] lookupSpace non-OK', { status: response.status, statusText: response.statusText, bodyPreview: errorText.substring(0,200) });
         throw new Error(`Failed to lookup space: ${response.status} ${response.statusText}. ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('✅ Space lookup successful:', data);
+      console.log('[GMTA] ✅ Space lookup successful:', data);
       return data;
     } catch (error) {
-      console.error('Error looking up space:', error);
+      console.error('[GMTA] Error looking up space:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Verify space exists and return its metadata
+   * GET /api/verifySpace?spaceName=spaces/XXX
+   */
+  async verifySpace(spaceName) {
+    try {
+      const token = await this.getAccessToken();
+      if (!token) {
+        throw new Error('Access token not available');
+        console.error('Error getting access token:', error);
+      }
+      console.log('Access token:', token);
+      console.log('Space name:', spaceName);
+      console.log('Proxy URL:', this.proxyUrl);
+      const baseUrl = this.proxyUrl || 'http://localhost:8787';
+      const url = `${baseUrl}/api/verifySpace?spaceName=${encodeURIComponent(spaceName)}`;
+      console.log('URL:', url);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'x-access-token': token,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to verify space: ${response.status} ${response.statusText}. ${errorText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      // Propagate error; caller will decide on fallback
       throw error;
     }
   }
@@ -109,6 +153,7 @@ export class GoogleMeetTranscriptAPI {
    */
   async getConferenceRecords(spaceName) {
     try {
+      console.log('[GMTA] getConferenceRecords start', { spaceName });
       const token = await this.getAccessToken();
       if (!token) {
         throw new Error('Access token not available');
@@ -118,7 +163,7 @@ export class GoogleMeetTranscriptAPI {
       const baseUrl = this.proxyUrl || 'http://localhost:8787';
       const url = `${baseUrl}/api/conferenceRecords?spaceName=${encodeURIComponent(spaceName)}`;
       
-      console.log('Fetching conference records for space:', spaceName);
+      console.log('[GMTA] Fetching conference records via proxy:', url);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -130,14 +175,15 @@ export class GoogleMeetTranscriptAPI {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.warn('[GMTA] getConferenceRecords non-OK', { status: response.status, statusText: response.statusText, bodyPreview: errorText.substring(0,200) });
         throw new Error(`Failed to get conference records: ${response.status} ${response.statusText}. ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('✅ Conference records fetched:', data);
+      console.log('[GMTA] ✅ Conference records fetched:', data);
       return data;
     } catch (error) {
-      console.error('Error getting conference records:', error);
+      console.error('[GMTA] Error getting conference records:', error);
       throw error;
     }
   }
@@ -148,6 +194,7 @@ export class GoogleMeetTranscriptAPI {
    */
   async getTranscripts(conferenceRecord) {
     try {
+      console.log('[GMTA] getTranscripts start', { conferenceRecord });
       const token = await this.getAccessToken();
       if (!token) {
         throw new Error('Access token not available');
@@ -157,7 +204,7 @@ export class GoogleMeetTranscriptAPI {
       const baseUrl = this.proxyUrl || 'http://localhost:8787';
       const url = `${baseUrl}/api/transcripts?conferenceRecord=${encodeURIComponent(conferenceRecord)}`;
       
-      console.log('Fetching transcripts for conference record:', conferenceRecord);
+      console.log('[GMTA] Fetching transcripts via proxy:', url);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -169,14 +216,15 @@ export class GoogleMeetTranscriptAPI {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.warn('[GMTA] getTranscripts non-OK', { status: response.status, statusText: response.statusText, bodyPreview: errorText.substring(0,200) });
         throw new Error(`Failed to get transcripts: ${response.status} ${response.statusText}. ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('✅ Transcripts fetched:', data);
+      console.log('[GMTA] ✅ Transcripts fetched:', data);
       return data;
     } catch (error) {
-      console.error('Error getting transcripts:', error);
+      console.error('[GMTA] Error getting transcripts:', error);
       throw error;
     }
   }
@@ -187,6 +235,7 @@ export class GoogleMeetTranscriptAPI {
    */
   async getTranscriptEntries(transcriptName) {
     try {
+      console.log('[GMTA] getTranscriptEntries start', { transcriptName });
       const token = await this.getAccessToken();
       if (!token) {
         throw new Error('Access token not available');
@@ -206,13 +255,14 @@ export class GoogleMeetTranscriptAPI {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.warn('[GMTA] getTranscriptEntries non-OK', { status: response.status, statusText: response.statusText, bodyPreview: errorText.substring(0,200) });
         throw new Error(`Failed to get transcript entries: ${response.status} ${response.statusText}. ${errorText}`);
       }
 
       const data = await response.json();
       return data;
     } catch (error) {
-      console.error('Error getting transcript entries:', error);
+      console.error('[GMTA] Error getting transcript entries:', error);
       throw error;
     }
   }
@@ -243,7 +293,7 @@ export class GoogleMeetTranscriptAPI {
    */
   async startTranscription(meetingCodeOrUrl, accessToken) {
     try {
-      console.log('Starting Google Meet transcript API...');
+      console.log('[GMTA] Starting Google Meet transcript API...');
       
       // Initialize auth - accessToken is required
       if (!accessToken) {
@@ -258,16 +308,36 @@ export class GoogleMeetTranscriptAPI {
         throw new Error('Could not extract meeting code from URL');
       }
       
-      console.log('Meeting code:', meetingCode);
+      console.log('[GMTA] Meeting code:', meetingCode);
       
-      // Step 1: Lookup space
-      const spaceData = await this.lookupSpace(meetingCode);
-      const spaceName = spaceData?.name || spaceData?.spaceName;
+      // Step 1: Lookup space, with fallbacks
+      let spaceName = null;
+      try {
+        const spaceData = await this.lookupSpace(meetingCode);
+        spaceName = spaceData?.name || spaceData?.spaceName || null;
+      } catch (lookupErr) {
+        // Fallback 1: try typical resource naming using the meeting code
+        const candidates = [
+          `spaces/${meetingCode}`,
+          `spaces/${(meetingCode || '').replace(/-/g, '')}`
+        ];
+        for (const candidate of candidates) {
+          try {
+            await this.verifySpace(candidate);
+            spaceName = candidate;
+            break;
+          } catch (_) {}
+        }
+
+        if (!spaceName) {
+          throw lookupErr;
+        }
+      }
       if (!spaceName) {
         throw new Error('Could not get space name from lookup');
       }
       
-      console.log('✅ Space name:', spaceName);
+      console.log('[GMTA] ✅ Space name:', spaceName);
       
       // Step 2: Get conference records
       const recordsData = await this.getConferenceRecords(spaceName);
@@ -283,7 +353,7 @@ export class GoogleMeetTranscriptAPI {
         throw new Error('Could not get conference record');
       }
       
-      console.log('✅ Conference record:', this.conferenceRecord);
+      console.log('[GMTA] ✅ Conference record:', this.conferenceRecord);
       
       // Step 3: Get transcripts
       const transcriptsData = await this.getTranscripts(this.conferenceRecord);
@@ -299,16 +369,16 @@ export class GoogleMeetTranscriptAPI {
         throw new Error('Could not get transcript');
       }
       
-      console.log('✅ Transcript:', this.transcript);
+      console.log('[GMTA] ✅ Transcript:', this.transcript);
       
       // Start polling for transcript entries
       this.isActive = true;
       this.startPolling();
       
-      console.log('✅ Live transcription started successfully');
+      console.log('[GMTA] ✅ Live transcription started successfully');
       return true;
     } catch (error) {
-      console.error('Error starting transcription:', error);
+      console.error('[GMTA] Error starting transcription:', error);
       this.isActive = false;
       if (this.onError) {
         this.onError(error);
@@ -326,6 +396,7 @@ export class GoogleMeetTranscriptAPI {
     }
 
     // Poll immediately
+    console.log('[GMTA] startPolling now');
     this.pollTranscriptEntries();
 
     // Then poll at regular intervals
@@ -340,6 +411,7 @@ export class GoogleMeetTranscriptAPI {
   async pollTranscriptEntries() {
     try {
       if (!this.isActive || !this.transcript) {
+        console.log('[GMTA] pollTranscriptEntries skipped (inactive or no transcript)');
         return;
       }
 
@@ -371,7 +443,7 @@ export class GoogleMeetTranscriptAPI {
         }
       }
     } catch (error) {
-      console.error('Error polling transcript entries:', error);
+      console.error('[GMTA] Error polling transcript entries:', error);
       // Don't stop polling on error, just log it
     }
   }
@@ -435,7 +507,7 @@ export class GoogleMeetTranscriptAPI {
    */
   async stopTranscription() {
     try {
-      console.log('Stopping transcription...');
+      console.log('[GMTA] Stopping transcription...');
 
       this.isActive = false;
 
@@ -449,10 +521,10 @@ export class GoogleMeetTranscriptAPI {
       this.transcript = null;
       this.lastEntryTime = null;
 
-      console.log('✅ Transcription stopped');
+      console.log('[GMTA] ✅ Transcription stopped');
       return true;
     } catch (error) {
-      console.error('Error stopping transcription:', error);
+      console.error('[GMTA] Error stopping transcription:', error);
       throw error;
     }
   }
