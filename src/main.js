@@ -238,19 +238,19 @@ function handleGoogleMeetTranscriptUpdate(entry) {
     
     // Update participant transcript (append new text)
     participant.transcript += (participant.transcript ? ' ' : '') + transcription;
-    participant.isSpeaking = true;
-    participant.lastSpoke = new Date().toLocaleTimeString();
-    
-    updateParticipantDisplay();
-    
-    // Stop speaking indicator after 3 seconds
-    setTimeout(() => {
-      if (participant) {
-        participant.isSpeaking = false;
+        participant.isSpeaking = true;
+        participant.lastSpoke = new Date().toLocaleTimeString();
+        
         updateParticipantDisplay();
+        
+        // Stop speaking indicator after 3 seconds
+        setTimeout(() => {
+      if (participant) {
+          participant.isSpeaking = false;
+          updateParticipantDisplay();
       }
-    }, 3000);
-    
+        }, 3000);
+        
     console.log(`${speakerName}: ${transcription}`);
   }
 }
@@ -956,11 +956,23 @@ async function handleOAuthAuthorization() {
       oauthAuthorizeBtn.style.background = '#4285f4';
     }
     
-    // Show helpful error messages
+    // Show helpful error messages with detailed configuration steps
     if (error.message && error.message.includes('redirect_uri_mismatch')) {
-      showAuthStatus('❌ Error: redirect_uri_mismatch. Please check your OAuth Client configuration in Google Cloud Console and ensure authorized JavaScript origins are set correctly.', 'error');
+      const instructions = '❌ Error: redirect_uri_mismatch\n\n' +
+        'To fix this in Google Cloud Console:\n' +
+        '1. Go to APIs & Services → Credentials\n' +
+        '2. Click your OAuth 2.0 Client ID\n' +
+        '3. Under "Authorized redirect URIs", click "+ Add URI"\n' +
+        '4. Add: http://localhost:8081\n' +
+        '5. Add: http://127.0.0.1:8081\n' +
+        '6. Click "Save"\n' +
+        '7. Wait 2-5 minutes, then try again\n\n' +
+        'Note: Redirect URIs are required for GSI popup-based OAuth';
+      showAuthStatus(instructions, 'error');
     } else if (error.message && error.message.includes('popup_closed')) {
-      showAuthStatus('❌ Popup was closed. Please click Authorize again and complete the authorization in the popup window.', 'error');
+      showAuthStatus('❌ Popup was closed. Please click Authorize again and complete the authorization. Make sure popups are allowed for this site.', 'error');
+    } else if (error.message && error.message.includes('access_denied')) {
+      showAuthStatus('❌ Authorization denied. Please try again and grant all requested permissions.', 'error');
     }
   }
 }
@@ -971,7 +983,14 @@ async function handleOAuthAuthorization() {
 function showAuthStatus(message, type = 'info') {
   const authStatus = document.getElementById('auth-status');
   if (authStatus) {
-    authStatus.textContent = message;
+    // Use innerHTML if message contains line breaks or HTML, otherwise use textContent
+    if (message.includes('\n') || message.includes('<')) {
+      // Convert line breaks to <br> for better display
+      const htmlMessage = message.replace(/\n/g, '<br>');
+      authStatus.innerHTML = htmlMessage;
+    } else {
+      authStatus.textContent = message;
+    }
     authStatus.style.display = 'block';
     
     if (type === 'success') {
@@ -997,8 +1016,8 @@ async function authorizeWithGoogleOAuth(clientIdOverride = null) {
   return new Promise((resolve, reject) => {
     if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
       reject(new Error('Google Identity Services not available'));
-      return;
-    }
+    return;
+  }
     
     // Get client ID from parameter, credentials, or input field
     let clientId = clientIdOverride;
@@ -1051,9 +1070,10 @@ async function authorizeWithGoogleOAuth(clientIdOverride = null) {
       });
       
       // Request access token (prompts user for consent)
-      // Use 'select_account' prompt to avoid redirect_uri issues
-      tokenClient.requestAccessToken({ prompt: 'select_account' });
-    } catch (error) {
+      // For iframe contexts, use 'consent' to ensure proper flow
+      // Note: redirect_uri_mismatch means redirect URIs need to be configured in Google Cloud Console
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+  } catch (error) {
       reject(error);
     }
   });
