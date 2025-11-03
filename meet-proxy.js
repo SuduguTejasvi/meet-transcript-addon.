@@ -18,8 +18,15 @@ const ALLOWED_ORIGINS = [
 app.use(cors({
   origin: ALLOWED_ORIGINS,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'X-Access-Token', 'x-access-token'],
+  allowedHeaders: [
+    'Content-Type',
+    'X-Access-Token', 'x-access-token',
+    'X-Project-Number', 'x-project-number'
+  ],
 }));
+
+// Ensure OPTIONS preflight responses include CORS headers
+// NOTE: cors() middleware above responds to preflight automatically; no explicit app.options route
 app.use(express.json());
 
 // Root route - helpful message
@@ -45,17 +52,32 @@ app.get('/api/lookupSpace', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const meetingCode = (req.query.meetingCode || '').toString().trim();
-    const projectNumber = (req.get('x-project-number') || req.query.project || process.env.CLOUD_PROJECT_NUMBER || '').toString().trim();
+    // Do not force quota project; the working test page does not set it
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!meetingCode) return res.status(400).json({ error: 'missing_meeting_code' });
 
-    // spaces:lookup is available under v2; some tenants return 404 for v2beta
-    const url = `https://meet.googleapis.com/v2/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}`;
-    const headers = { 'Authorization': `Bearer ${accessToken}` };
-    if (projectNumber) headers['X-Goog-User-Project'] = projectNumber;
-    const upstream = await fetch(url, { headers });
+    // Prefer JSON responses for better error messages
+    const headers = { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' };
+    
+    // Try v2beta first (this is what the working test flow uses), then v2
+    let upstream = await fetch(`https://meet.googleapis.com/v2beta/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}` , { headers });
+    let body = await upstream.text();
+    const isHtml = body && body.trim().startsWith('<');
+    if (upstream.status === 404 || isHtml) {
+      // Retry with v2
+      const retryResp = await fetch(`https://meet.googleapis.com/v2/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}` , { headers });
+      const retryBody = await retryResp.text();
+      if (retryResp.ok) {
+        upstream = retryResp;
+        body = retryBody;
+      } else if (retryResp.status !== 404 || !isHtml) {
+        // Use retry response if it provides a better error than generic HTML
+        upstream = retryResp;
+        body = retryBody;
+      }
+    }
 
-    const text = await upstream.text();
+    const text = body;
     res.status(upstream.status);
     try {
       res.type('application/json').send(JSON.stringify(JSON.parse(text)));
