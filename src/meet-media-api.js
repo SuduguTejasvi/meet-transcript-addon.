@@ -58,10 +58,10 @@ export class MeetMediaAPI {
         return eventsParticipants;
       }
       
-      // Fallback: simulated participants
+      // Return empty array if no participants found (no mock data)
       console.log('⚠️ Meet Add-ons SDK has limited participant access');
-      console.log('📋 Falling back to simulated participants');
-      return this.getSimulatedParticipants();
+      console.log('📋 No participants available via API');
+      return [];
       
     } catch (error) {
       console.error('Error getting current participants:', error);
@@ -117,46 +117,6 @@ export class MeetMediaAPI {
     }
   }
 
-  /**
-   * Get simulated participants for demonstration
-   */
-  getSimulatedParticipants() {
-    return [
-      {
-        id: 'user1',
-        name: 'John Doe',
-        email: 'john@example.com',
-        isLocal: true,
-        isSpeaking: false,
-        avatar: '👨‍💼',
-        transcript: '',
-        lastSpoke: null,
-        joinedAt: new Date().toISOString()
-      },
-      {
-        id: 'user2',
-        name: 'Jane Smith',
-        email: 'jane@example.com',
-        isLocal: false,
-        isSpeaking: false,
-        avatar: '👩‍💼',
-        transcript: '',
-        lastSpoke: null,
-        joinedAt: new Date().toISOString()
-      },
-      {
-        id: 'user3',
-        name: 'Bob Johnson',
-        email: 'bob@example.com',
-        isLocal: false,
-        isSpeaking: false,
-        avatar: '👨‍🔬',
-        transcript: '',
-        lastSpoke: null,
-        joinedAt: new Date().toISOString()
-      }
-    ];
-  }
 
   /**
    * Get meeting information using Meet Add-ons SDK
@@ -171,10 +131,10 @@ export class MeetMediaAPI {
       console.log('⚠️ Meet Add-ons SDK has limited meeting info access');
       
       return {
-        meetingId: this.meetingId || 'simulated-meeting',
+        meetingId: this.meetingId || null,
         title: 'Google Meet Session',
         startTime: new Date().toISOString(),
-        participantCount: this.getSimulatedParticipants().length
+        participantCount: this.participants.size
       };
       
     } catch (error) {

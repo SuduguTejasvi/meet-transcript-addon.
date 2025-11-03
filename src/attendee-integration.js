@@ -29,13 +29,127 @@ export class AttendeeIntegration {
   }
 
   /**
+   * Prompt user for meeting URL as fallback
+   */
+  async promptForMeetingUrl() {
+    return new Promise((resolve) => {
+      // Only prompt if we're in a browser environment
+      if (typeof window === 'undefined') {
+        resolve(null);
+        return;
+      }
+      
+      // Try to show a prompt (may not work in all contexts)
+      try {
+        const meetingCode = prompt('Could not automatically detect the meeting URL.\n\nPlease enter the Google Meet code (e.g., "abc-defg-hij") or full URL:');
+        if (meetingCode) {
+          let url = meetingCode.trim();
+          // If it's just a code, construct the full URL
+          if (!url.includes('http')) {
+            url = `https://meet.google.com/${url.replace(/^\/+|\/+$/g, '')}`;
+          }
+          // Validate it's a meet.google.com URL
+          if (url.includes('meet.google.com')) {
+            console.log('✅ Using manually entered meeting URL:', url);
+            resolve(url);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not show prompt:', err);
+      }
+      
+      resolve(null);
+    });
+  }
+
+  /**
+   * Request meeting code from parent window via postMessage
+   */
+  async requestMeetingCodeFromParent() {
+    return new Promise((resolve) => {
+      // Set up message listener
+      const messageHandler = (event) => {
+        if (event.data && event.data.type === 'MEETING_CODE_RESPONSE') {
+          window.removeEventListener('message', messageHandler);
+          resolve(event.data.meetingCode || null);
+        }
+      };
+      
+      window.addEventListener('message', messageHandler);
+      
+      // Request meeting code from parent
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'REQUEST_MEETING_CODE' }, '*');
+          // Timeout after 1 second
+          setTimeout(() => {
+            window.removeEventListener('message', messageHandler);
+            resolve(null);
+          }, 1000);
+        } else {
+          resolve(null);
+        }
+      } catch (err) {
+        console.warn('Error requesting meeting code from parent:', err);
+        window.removeEventListener('message', messageHandler);
+        resolve(null);
+      }
+    });
+  }
+
+  /**
    * Get the current meeting URL from Google Meet session
    */
   async getMeetingUrl() {
     try {
       console.log('Attempting to detect meeting URL...');
       
-      // Method 1: Try using sidePanelClient or mainStageClient to get meeting info
+      // Method 1: Extract from current page URL parameters (for iframe context)
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const origin = urlParams.get('origin');
+        if (origin) {
+          const decodedOrigin = decodeURIComponent(origin);
+          console.log('Found origin parameter:', decodedOrigin);
+          
+          // If origin is meet.google.com, try to get meeting code from parent or other sources
+          if (decodedOrigin.includes('meet.google.com')) {
+            // Try to extract meeting code from parent window via postMessage
+            const meetingCode = await this.requestMeetingCodeFromParent();
+            if (meetingCode) {
+              const url = `https://meet.google.com/${meetingCode}`;
+              console.log('✅ Found meeting URL from parent communication:', url);
+              return url;
+            }
+          }
+        }
+        
+        // Try to decode meet_sdk parameter (base64 encoded JSON)
+        const meetSdk = urlParams.get('meet_sdk');
+        if (meetSdk) {
+          try {
+            const decoded = atob(meetSdk);
+            const sdkData = JSON.parse(decoded);
+            console.log('Decoded meet_sdk:', sdkData);
+            // SDK data might contain meeting information
+            if (sdkData && Array.isArray(sdkData) && sdkData.length > 1) {
+              // Often contains [version, channel, origin, projectNumber, ...]
+              const possibleUrl = sdkData.find(item => typeof item === 'string' && item.includes('meet.google.com'));
+              if (possibleUrl) {
+                console.log('✅ Found meeting URL from meet_sdk:', possibleUrl);
+                return possibleUrl;
+              }
+            }
+          } catch (e) {
+            console.warn('Could not decode meet_sdk parameter:', e);
+          }
+        }
+      } catch (err) {
+        console.warn('Error extracting from URL parameters:', err);
+      }
+      
+      // Method 2: Try using sidePanelClient or mainStageClient to get meeting info
       if (this.sidePanelClient) {
         try {
           const meetingInfo = await this.sidePanelClient.getMeetingInfo?.();
@@ -83,7 +197,7 @@ export class AttendeeIntegration {
         }
       }
       
-      // Method 2: From Meet Add-ons SDK session
+      // Method 3: From Meet Add-ons SDK session
       if (this.credentials?.meetSession) {
         try {
           const meetingInfo = await this.credentials.meetSession.getMeetingInfo?.();
@@ -107,7 +221,7 @@ export class AttendeeIntegration {
         }
       }
       
-      // Method 3: Try to access parent window URL (if in iframe)
+      // Method 4: Try to access parent window URL (if in iframe)
       try {
         if (window.parent && window.parent !== window) {
           const parentUrl = window.parent.location.href;
@@ -127,7 +241,7 @@ export class AttendeeIntegration {
         console.warn('Could not access parent window (cross-origin):', err.message);
       }
       
-      // Method 4: Try document.referrer
+      // Method 5: Try document.referrer
       try {
         const referrer = document.referrer;
         if (referrer && referrer.includes('meet.google.com')) {
@@ -143,7 +257,7 @@ export class AttendeeIntegration {
         console.warn('Could not get meeting URL from referrer:', err);
       }
       
-      // Method 5: From current browser URL
+      // Method 6: From current browser URL
       const currentUrl = window.location.href;
       if (currentUrl.includes('meet.google.com')) {
         const match = currentUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i);
@@ -155,7 +269,7 @@ export class AttendeeIntegration {
         }
       }
       
-      // Method 6: Try to find in DOM
+      // Method 7: Try to find in DOM
       const meetLinks = document.querySelectorAll('a[href*="meet.google.com"]');
       if (meetLinks.length > 0) {
         for (const link of meetLinks) {
@@ -169,13 +283,37 @@ export class AttendeeIntegration {
         }
       }
       
-      // Fallback: Try to extract from URL parameters
-      const urlParams = new URLSearchParams(window.location.search);
-      const meetingCode = urlParams.get('meetingCode') || urlParams.get('meeting') || urlParams.get('code');
-      if (meetingCode) {
-        const url = `https://meet.google.com/${meetingCode}`;
-        console.log('✅ Found meeting URL from URL params:', url);
-        return url;
+      // Method 8: Try to get from sessionStorage/localStorage (Google Meet might store it)
+      try {
+        const storedUrl = sessionStorage.getItem('meet_url') || localStorage.getItem('meet_url');
+        if (storedUrl && storedUrl.includes('meet.google.com')) {
+          console.log('✅ Found meeting URL from storage:', storedUrl);
+          return storedUrl;
+        }
+        
+        // Try to get meeting code from storage
+        const storedCode = sessionStorage.getItem('meet_code') || localStorage.getItem('meet_code');
+        if (storedCode) {
+          const url = `https://meet.google.com/${storedCode}`;
+          console.log('✅ Found meeting URL from stored code:', url);
+          return url;
+        }
+      } catch (err) {
+        console.warn('Could not access storage:', err);
+      }
+      
+      // Method 9: Try window.name (sometimes used by iframes)
+      try {
+        if (window.name && window.name.includes('meet.google.com')) {
+          const match = window.name.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+          if (match && match[1]) {
+            const url = `https://meet.google.com/${match[1]}`;
+            console.log('✅ Found meeting URL from window.name:', url);
+            return url;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not access window.name:', err);
       }
       
       // Final fallback: Return null
@@ -201,9 +339,13 @@ export class AttendeeIntegration {
       if (!meetingUrl) {
         meetingUrl = await this.getMeetingUrl();
         if (!meetingUrl) {
-          // As a last resort, try to prompt for manual entry or use a fallback
-          // For now, we'll throw an error with helpful instructions
-          throw new Error('Could not automatically detect meeting URL. The add-on needs access to the Google Meet URL. Please ensure you are running this from within a Google Meet session, or contact support if the issue persists.');
+          // Last resort: try to prompt user for meeting URL
+          const userMeetingUrl = await this.promptForMeetingUrl();
+          if (userMeetingUrl) {
+            meetingUrl = userMeetingUrl;
+          } else {
+            throw new Error('Could not detect meeting URL. Please ensure you are running this from within a Google Meet session. You may need to manually enter the meeting URL if automatic detection fails.');
+          }
         }
       }
 
