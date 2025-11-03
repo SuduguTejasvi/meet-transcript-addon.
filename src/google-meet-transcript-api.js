@@ -241,10 +241,12 @@ export class GoogleMeetTranscriptAPI {
     try {
       console.log('Starting Google Meet transcript API...');
       
-      // Initialize auth
-      if (accessToken) {
-        await this.initializeAuth(accessToken);
+      // Initialize auth - accessToken is required
+      if (!accessToken) {
+        throw new Error('Access token is required. Please authenticate first.');
       }
+      
+      await this.initializeAuth(accessToken);
       
       // Extract meeting code
       const meetingCode = this.extractMeetingCode(meetingCodeOrUrl) || meetingCodeOrUrl;

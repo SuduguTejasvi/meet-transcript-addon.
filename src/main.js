@@ -641,7 +641,21 @@ async function startTranscript() {
     }
     
     // Get access token from Meet session
-    const accessToken = await getAccessTokenFromSession();
+    let accessToken = await getAccessTokenFromSession();
+    
+    // If no token, show authentication UI and wait
+    if (!accessToken) {
+      if (status) {
+        status.style.background = '#fff3cd';
+        status.style.color = '#856404';
+        status.textContent = '⚠️ Authentication required. Please enter your access token.';
+      }
+      accessToken = await promptForAccessToken();
+      
+      if (!accessToken) {
+        throw new Error('Access token is required to use Google Meet API. Please authenticate.');
+      }
+    }
     
     // Start Google Meet transcript API
     await googleMeetTranscriptAPI.startTranscription(meetingCodeOrUrl, accessToken);
@@ -721,32 +735,171 @@ async function getMeetingCodeFromSession() {
 }
 
 /**
- * Get access token from Meet session
+ * Get access token from Meet session using Google Meet Add-ons SDK
  */
 async function getAccessTokenFromSession() {
   try {
-    // In Google Meet Add-ons, the platform should provide authentication
-    // For now, we'll need to get the token from the session or credentials
-    // This may need to be implemented based on your authentication setup
+    console.log('Attempting to get access token from Meet session...');
     
-    // Check if token is in credentials
+    // Method 1: Try to get from sidePanelClient (Google Meet Add-ons SDK)
+    if (sidePanelClient) {
+      try {
+        // Google Meet Add-ons SDK may provide getAccessToken method
+        if (sidePanelClient.getAccessToken) {
+          const tokenData = await sidePanelClient.getAccessToken();
+          const token = tokenData?.token || tokenData?.accessToken || tokenData;
+          if (token && token !== 'platform-managed') {
+            console.log('✅ Got access token from sidePanelClient');
+            return token;
+          }
+        }
+      } catch (err) {
+        console.warn('Error getting token from sidePanelClient:', err);
+      }
+    }
+    
+    // Method 2: Try to get from mainStageClient
+    if (mainStageClient) {
+      try {
+        if (mainStageClient.getAccessToken) {
+          const tokenData = await mainStageClient.getAccessToken();
+          const token = tokenData?.token || tokenData?.accessToken || tokenData;
+          if (token && token !== 'platform-managed') {
+            console.log('✅ Got access token from mainStageClient');
+            return token;
+          }
+        }
+      } catch (err) {
+        console.warn('Error getting token from mainStageClient:', err);
+      }
+    }
+    
+    // Method 3: Try to get from Meet session
+    if (credentials?.meetSession) {
+      try {
+        // Check if session has getAccessToken method
+        if (credentials.meetSession.getAccessToken) {
+          const tokenData = await credentials.meetSession.getAccessToken();
+          const token = tokenData?.token || tokenData?.accessToken || tokenData;
+          if (token && token !== 'platform-managed') {
+            console.log('✅ Got access token from meetSession');
+            return token;
+          }
+        }
+        
+        // Try using the session's token property if available
+        if (credentials.meetSession.token) {
+          console.log('✅ Got access token from meetSession.token');
+          return credentials.meetSession.token;
+        }
+      } catch (err) {
+        console.warn('Error getting token from meetSession:', err);
+      }
+    }
+    
+    // Method 4: Check if stored in credentials
     if (credentials?.accessToken) {
+      console.log('✅ Using access token from credentials');
       return credentials.accessToken;
     }
     
-    // Try to get from Meet session (platform may provide this)
-    if (credentials?.meetSession?.getAccessToken) {
-      const tokenData = await credentials.meetSession.getAccessToken();
-      return tokenData?.token || tokenData;
+    // Method 5: Try to use Google Identity Services (gapi) if available
+    if (window.gapi && window.gapi.auth2) {
+      try {
+        const authInstance = window.gapi.auth2.getAuthInstance();
+        if (authInstance && authInstance.isSignedIn.get()) {
+          const user = authInstance.currentUser.get();
+          const authResponse = user.getAuthResponse(true);
+          if (authResponse && authResponse.access_token) {
+            console.log('✅ Got access token from Google Identity Services');
+            return authResponse.access_token;
+          }
+        }
+      } catch (err) {
+        console.warn('Error getting token from gapi:', err);
+      }
     }
     
-    // Fallback: return null and let the API handle authentication
-    console.warn('Access token not found. API calls may fail without proper authentication.');
-    return null;
+    // If no token found, prompt user to authenticate
+    console.warn('⚠️ Access token not found. Prompting user for authentication...');
+    const token = await promptForAccessToken();
+    return token;
+    
   } catch (error) {
-    console.warn('Error getting access token:', error);
-    return null;
+    console.error('Error getting access token:', error);
+    // Try to prompt for manual entry as last resort
+    return await promptForAccessToken();
   }
+}
+
+/**
+ * Prompt user to enter access token manually via UI
+ */
+async function promptForAccessToken() {
+  return new Promise((resolve) => {
+    // Show UI input for access token
+    const authContainer = document.getElementById('auth-token-input-container');
+    const authInput = document.getElementById('auth-token-input');
+    const saveBtn = document.getElementById('save-auth-token');
+    
+    if (!authContainer || !authInput || !saveBtn) {
+      // Fallback to browser prompt if UI elements don't exist
+      const message = 'Google Meet API requires an access token.\n\nEnter your Google OAuth access token:';
+      try {
+        const token = prompt(message);
+        if (token && token.trim()) {
+          console.log('✅ Using manually entered access token');
+          if (credentials) {
+            credentials.accessToken = token.trim();
+          }
+          resolve(token.trim());
+        } else {
+          resolve(null);
+        }
+      } catch (err) {
+        resolve(null);
+      }
+      return;
+    }
+    
+    // Show the auth container
+    authContainer.style.display = 'block';
+    authInput.value = ''; // Clear any previous value
+    authInput.focus();
+    
+    // Handle save button click
+    const handleSave = () => {
+      const token = authInput.value.trim();
+      if (token) {
+        console.log('✅ Using manually entered access token');
+        // Store it in credentials for future use
+        if (credentials) {
+          credentials.accessToken = token;
+        }
+        // Hide the container
+        authContainer.style.display = 'none';
+        // Remove event listeners
+        saveBtn.removeEventListener('click', handleSave);
+        authInput.removeEventListener('keypress', handleEnter);
+        resolve(token);
+      } else {
+        alert('Please enter a valid access token');
+      }
+    };
+    
+    // Handle Enter key
+    const handleEnter = (e) => {
+      if (e.key === 'Enter') {
+        handleSave();
+      }
+    };
+    
+    saveBtn.addEventListener('click', handleSave);
+    authInput.addEventListener('keypress', handleEnter);
+    
+    // Also allow clicking outside to cancel (optional)
+    // For now, we'll require them to enter a token
+  });
 }
 
 /**
