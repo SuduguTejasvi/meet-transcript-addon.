@@ -11,9 +11,15 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:8081',
   'http://localhost:8000',
   'http://127.0.0.1:8000',
+  // Allow GitHub Pages origin for production sidepanel hosting
+  'https://sudugutejasvi.github.io',
 ];
 
-app.use(cors({ origin: ALLOWED_ORIGINS }));
+app.use(cors({
+  origin: ALLOWED_ORIGINS,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'X-Access-Token', 'x-access-token'],
+}));
 app.use(express.json());
 
 // Root route - helpful message
@@ -39,13 +45,15 @@ app.get('/api/lookupSpace', async (req, res) => {
   try {
     const accessToken = req.get('x-access-token');
     const meetingCode = (req.query.meetingCode || '').toString().trim();
+    const projectNumber = (req.get('x-project-number') || req.query.project || process.env.CLOUD_PROJECT_NUMBER || '').toString().trim();
     if (!accessToken) return res.status(401).json({ error: 'missing_access_token' });
     if (!meetingCode) return res.status(400).json({ error: 'missing_meeting_code' });
 
-    const url = `https://meet.googleapis.com/v2beta/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}`;
-    const upstream = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
+    // spaces:lookup is available under v2; some tenants return 404 for v2beta
+    const url = `https://meet.googleapis.com/v2/spaces:lookup?meetingCode=${encodeURIComponent(meetingCode)}`;
+    const headers = { 'Authorization': `Bearer ${accessToken}` };
+    if (projectNumber) headers['X-Goog-User-Project'] = projectNumber;
+    const upstream = await fetch(url, { headers });
 
     const text = await upstream.text();
     res.status(upstream.status);

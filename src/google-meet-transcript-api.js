@@ -85,6 +85,7 @@ export class GoogleMeetTranscriptAPI {
         method: 'GET',
         headers: {
           'x-access-token': token,
+          'x-project-number': (this.credentials && this.credentials.cloudProjectNumber) ? String(this.credentials.cloudProjectNumber) : '',
           'Content-Type': 'application/json'
         }
       });
