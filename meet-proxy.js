@@ -76,17 +76,21 @@ app.use(cors({
 
 // Ensure OPTIONS preflight responses include CORS headers
 // Explicitly handle OPTIONS preflight for all routes (for ngrok compatibility)
-app.options('*', (req, res) => {
-  const origin = req.headers.origin;
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, X-Access-Token, x-access-token, X-Project-Number, x-project-number, x-claude-key, X-CLAUDE-KEY, x-attendee-api-key, X-ATTENDEE-API-KEY, Authorization');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
-    res.status(200).send();
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    const origin = req.headers.origin;
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, X-Access-Token, x-access-token, X-Project-Number, x-project-number, x-claude-key, X-CLAUDE-KEY, x-attendee-api-key, X-ATTENDEE-API-KEY, Authorization');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
+      res.status(200).send();
+    } else {
+      res.status(403).send('Origin not allowed');
+    }
   } else {
-    res.status(403).send('Origin not allowed');
+    next();
   }
 });
 
