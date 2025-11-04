@@ -15,6 +15,10 @@ export class AttendeeIntegration {
     this.isActive = false;
     this.pollInterval = null;
     this.transcriptEntries = [];
+    this.useWebhooks = false; // Whether to use webhooks instead of polling
+    this.webhookUrl = null; // Webhook URL for bot creation
+    this.webhookPollInterval = null; // Polling interval for webhook transcripts
+    this.lastWebhookTimestamp = 0; // Last timestamp we fetched from webhook endpoint
     
     // Event handlers
     this.onTranscriptUpdate = null;
@@ -24,8 +28,13 @@ export class AttendeeIntegration {
     // API base URL
     this.baseUrl = 'https://app.attendee.dev/api/v1';
     
+    // Proxy server URL for webhook polling
+    this.proxyServerUrl = credentials?.proxyServerUrl || 'http://localhost:8787';
+    
     // Polling interval (in milliseconds) - poll every 2 seconds for real-time updates
     this.pollIntervalMs = 2000;
+    // Webhook polling interval (faster since webhooks are more real-time)
+    this.webhookPollIntervalMs = 500;
   }
 
   /**
@@ -371,6 +380,15 @@ export class AttendeeIntegration {
   }
 
   /**
+   * Set webhook URL for real-time updates
+   */
+  setWebhookUrl(webhookUrl) {
+    this.webhookUrl = webhookUrl;
+    this.useWebhooks = !!webhookUrl;
+    console.log('Webhook URL set:', webhookUrl);
+  }
+
+  /**
    * Create a bot to join the meeting
    * POST /bots with meeting_url
    */
@@ -397,24 +415,38 @@ export class AttendeeIntegration {
       this.meetingUrl = meetingUrl;
       console.log('Creating Attendee.ai bot for meeting:', meetingUrl);
 
+      // Build request body
+      const requestBody = {
+        meeting_url: meetingUrl,
+        // Optional: Configure transcription settings
+        transcription_settings: {
+          deepgram: {
+            language: 'en-US',
+            model: 'nova-2',
+            punctuate: true,
+            smart_format: true
+          }
+        }
+      };
+
+      // Add webhooks if configured
+      if (this.useWebhooks && this.webhookUrl) {
+        requestBody.webhooks = [
+          {
+            url: this.webhookUrl,
+            triggers: ['transcript.update', 'bot.state_change']
+          }
+        ];
+        console.log('Using webhooks for real-time updates:', this.webhookUrl);
+      }
+
       const response = await fetch(`${this.baseUrl}/bots`, {
         method: 'POST',
         headers: {
           'Authorization': `Token ${this.apiKey}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          meeting_url: meetingUrl,
-          // Optional: Configure transcription settings
-          transcription_settings: {
-            deepgram: {
-              language: 'en-US',
-              model: 'nova-2',
-              punctuate: true,
-              smart_format: true
-            }
-          }
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -476,7 +508,7 @@ export class AttendeeIntegration {
   }
 
   /**
-   * Start live transcription polling
+   * Start live transcription polling or webhook polling
    */
   async startTranscription(meetingUrl = null) {
     try {
@@ -492,11 +524,17 @@ export class AttendeeIntegration {
 
       this.isActive = true;
       this.transcriptEntries = [];
+      this.lastWebhookTimestamp = 0;
 
-      console.log('Starting live transcription polling...');
-
-      // Start polling for transcript updates
-      this.startPolling();
+      if (this.useWebhooks && this.webhookUrl) {
+        console.log('Starting webhook-based transcription polling...');
+        // Poll webhook endpoint on proxy server
+        this.startWebhookPolling();
+      } else {
+        console.log('Starting API-based transcription polling...');
+        // Poll Attendee API directly
+        this.startPolling();
+      }
 
       if (this.onBotStatusChange) {
         this.onBotStatusChange({ status: 'active', botId: this.botId });
@@ -510,6 +548,90 @@ export class AttendeeIntegration {
         this.onError(error);
       }
       throw error;
+    }
+  }
+
+  /**
+   * Start polling webhook endpoint for transcript updates
+   */
+  startWebhookPolling() {
+    if (this.webhookPollInterval) {
+      clearInterval(this.webhookPollInterval);
+    }
+
+    // Poll immediately
+    this.pollWebhookTranscripts();
+
+    // Then poll at regular intervals
+    this.webhookPollInterval = setInterval(() => {
+      this.pollWebhookTranscripts();
+    }, this.webhookPollIntervalMs);
+  }
+
+  /**
+   * Poll webhook transcripts from proxy server
+   */
+  async pollWebhookTranscripts() {
+    try {
+      if (!this.isActive || !this.botId) {
+        return;
+      }
+
+      const url = `${this.proxyServerUrl}/api/webhooks/attendee/transcripts/${this.botId}?since=${this.lastWebhookTimestamp}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        console.warn('Error polling webhook transcripts:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      const newTranscripts = data.transcripts || [];
+
+      if (newTranscripts.length > 0) {
+        // Process new transcript entries
+        newTranscripts.forEach(entry => {
+          if (entry.type === 'bot_state_change') {
+            // Handle bot state change
+            if (this.onBotStatusChange) {
+              this.onBotStatusChange({
+                status: entry.newState,
+                oldStatus: entry.oldState,
+                eventType: entry.eventType,
+                botId: entry.botId
+              });
+            }
+          } else if (entry.transcription) {
+            // Handle transcript update
+            if (this.onTranscriptUpdate) {
+              const formattedEntry = {
+                speakerName: entry.speakerName || 'Unknown',
+                speakerUuid: entry.speakerUuid || null,
+                timestamp: entry.timestamp || 0,
+                duration: entry.duration || 0,
+                transcription: entry.transcription,
+                words: entry.words || null,
+                isFinal: true // Webhook transcripts are always final
+              };
+              this.onTranscriptUpdate(formattedEntry);
+            }
+          }
+        });
+
+        // Update last timestamp
+        if (data.latestTimestamp > this.lastWebhookTimestamp) {
+          this.lastWebhookTimestamp = data.latestTimestamp;
+        }
+      }
+    } catch (error) {
+      console.error('Error polling webhook transcripts:', error);
+      // Don't stop polling on error, just log it
     }
   }
 
@@ -570,22 +692,34 @@ export class AttendeeIntegration {
     // Update our stored entries
     this.transcriptEntries = entries;
 
-    // Emit updates for new entries
-    newEntries.forEach(entry => {
-      if (this.onTranscriptUpdate) {
-        // Format entry according to Attendee.ai API response
-        const formattedEntry = {
-          speakerName: entry.speaker_name || entry.speakerName || 'Unknown',
-          speakerUuid: entry.speaker_uuid || entry.speakerUuid || null,
-          timestamp: entry.timestamp_ms || entry.timestamp || 0,
-          duration: entry.duration_ms || entry.duration || 0,
-          transcription: entry.transcription || entry.text || '',
-          isFinal: entry.is_final !== false // Default to true for transcript entries
-        };
+      // Emit updates for new entries
+      newEntries.forEach(entry => {
+        if (this.onTranscriptUpdate) {
+          // Extract transcript text - handle nested structure from Attendee API
+          let transcriptText = '';
+          if (entry.transcription) {
+            // Handle nested transcription object: { transcript: "text", words: [...] }
+            transcriptText = typeof entry.transcription === 'string' 
+              ? entry.transcription 
+              : (entry.transcription.transcript || entry.transcription.text || '');
+          } else {
+            // Fallback to direct text field
+            transcriptText = entry.text || entry.transcript || '';
+          }
+          
+          // Format entry according to Attendee.ai API response
+          const formattedEntry = {
+            speakerName: entry.speaker_name || entry.speakerName || 'Unknown',
+            speakerUuid: entry.speaker_uuid || entry.speakerUuid || null,
+            timestamp: entry.timestamp_ms || entry.timestamp || 0,
+            duration: entry.duration_ms || entry.duration || 0,
+            transcription: transcriptText,
+            isFinal: entry.is_final !== false // Default to true for transcript entries
+          };
 
-        this.onTranscriptUpdate(formattedEntry);
-      }
-    });
+          this.onTranscriptUpdate(formattedEntry);
+        }
+      });
   }
 
   /**
@@ -601,6 +735,12 @@ export class AttendeeIntegration {
       if (this.pollInterval) {
         clearInterval(this.pollInterval);
         this.pollInterval = null;
+      }
+
+      // Stop webhook polling
+      if (this.webhookPollInterval) {
+        clearInterval(this.webhookPollInterval);
+        this.webhookPollInterval = null;
       }
 
       if (this.onBotStatusChange) {

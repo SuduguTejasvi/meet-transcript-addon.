@@ -69,7 +69,7 @@ export class SecureCredentialManager {
         this.credentials = {
           cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER || '409997382473',
           deepgramApiKey: process.env.DEEPGRAM_API_KEY || '306114cbf5e0f315e34cc259af3d16b9fe000992',
-          attendeeApiKey: process.env.ATTENDEE_API_KEY || 'FMviPsiy3HSqx50aA51S4cFuTx868JBB',
+          attendeeApiKey: process.env.ATTENDEE_API_KEY || 'iNTT7LNLA09cjy8uxwoaquRqrhYrmmaM',
           oauthClientId: process.env.OAUTH_CLIENT_ID || '409997382473-c9kq9iijvgibd139ngrg8acitiip22vl.apps.googleusercontent.com',
           proxyUrl: process.env.MEET_PROXY_URL || 'http://localhost:8787', // Default to meet-proxy.js server
           mainStageUrl: process.env.MAIN_STAGE_URL || window.location.origin + '/mainstage.html',

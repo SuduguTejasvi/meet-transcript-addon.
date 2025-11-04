@@ -2,6 +2,7 @@
 
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 // Using Node 18+ built-in fetch (no need for node-fetch)
 
 const app = express();
@@ -15,6 +16,48 @@ const ALLOWED_ORIGINS = [
   'https://sudugutejasvi.github.io',
 ];
 
+// Webhook secret from environment variable (get from Attendee dashboard)
+const ATTENDEE_WEBHOOK_SECRET = process.env.ATTENDEE_WEBHOOK_SECRET || 'w6qpnfZZDIyPO2zqGwC4wuAJlzaJUBELncyjfu/RauI=';
+
+// In-memory storage for webhook transcripts (keyed by bot_id)
+const webhookTranscripts = new Map();
+
+// Helper function to sort object keys recursively
+function sortKeys(value) {
+  if (Array.isArray(value)) {
+    return value.map(sortKeys);
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.keys(value)
+      .sort()
+      .reduce((acc, k) => ({ ...acc, [k]: sortKeys(value[k]) }), {});
+  }
+  return value;
+}
+
+// Helper function to verify webhook signature
+function verifyWebhookSignature(payload, signature, secret) {
+  if (!secret || !signature) {
+    console.warn('[Webhook] No secret or signature provided, skipping verification');
+    return true; // Allow if no secret configured (for development)
+  }
+  
+  try {
+    // Convert payload to canonical JSON string (sorted keys)
+    const canonical = JSON.stringify(sortKeys(payload));
+    const secretBuf = Buffer.from(secret, 'base64');
+    const calculatedSignature = crypto
+      .createHmac('sha256', secretBuf)
+      .update(canonical, 'utf8')
+      .digest('base64');
+    
+    return calculatedSignature === signature;
+  } catch (err) {
+    console.error('[Webhook] Error verifying signature:', err);
+    return false;
+  }
+}
+
 // Log basic server start info and CORS config
 console.log('[Proxy] CORS allowed origins:', ALLOWED_ORIGINS);
 
@@ -24,7 +67,8 @@ app.use(cors({
   allowedHeaders: [
     'Content-Type',
     'X-Access-Token', 'x-access-token',
-    'X-Project-Number', 'x-project-number'
+    'X-Project-Number', 'x-project-number',
+    'x-claude-key', 'X-CLAUDE-KEY'
   ],
 }));
 
@@ -305,7 +349,173 @@ app.get('/api/docs/transcript', async (req, res) => {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// Proxy to Anthropic Claude to avoid browser CORS
+app.post('/api/askClaude', async (req, res) => {
+  try {
+    const claudeKey = req.get('x-claude-key');
+    const { prompt, model, max_tokens } = req.body || {};
+    if (!claudeKey) return res.status(401).json({ error: 'missing_api_key' });
+    if (!prompt) return res.status(400).json({ error: 'missing_prompt' });
+    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': claudeKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: model || 'claude-3-5-sonnet-20240620',
+        max_tokens: max_tokens || 512,
+        messages: [
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+    const text = await upstream.text();
+    res.status(upstream.status);
+    try {
+      const json = JSON.parse(text);
+      const answer = (json && json.content && json.content[0] && json.content[0].text) || text;
+      res.type('application/json').send(JSON.stringify({ answer, raw: json }));
+    } catch (_) {
+      res.type('application/json').send(JSON.stringify({ answer: text }));
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'proxy_error', message: err && err.message ? err.message : String(err) });
+  }
+});
+
+// Webhook endpoint for Attendee.ai transcript updates
+app.post('/api/webhooks/attendee', async (req, res) => {
+  try {
+    const payload = req.body;
+    const signature = req.header('X-Webhook-Signature') || '';
+    
+    console.log('[Webhook] Received Attendee webhook:', {
+      trigger: payload?.trigger,
+      botId: payload?.bot_id,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Verify webhook signature
+    if (!verifyWebhookSignature(payload, signature, ATTENDEE_WEBHOOK_SECRET)) {
+      console.error('[Webhook] Invalid signature');
+      return res.status(400).json({ error: 'invalid_signature' });
+    }
+    
+    // Handle different webhook triggers
+    const trigger = payload?.trigger;
+    const botId = payload?.bot_id;
+    const data = payload?.data || {};
+    
+    if (trigger === 'transcript.update') {
+      // Handle transcript update
+      const transcriptEntry = {
+        speakerName: data.speaker_name || 'Unknown',
+        speakerUuid: data.speaker_uuid || null,
+        speakerUserUuid: data.speaker_user_uuid || null,
+        speakerIsHost: data.speaker_is_host || false,
+        timestamp: data.timestamp_ms || 0,
+        duration: data.duration_ms || 0,
+        transcription: data.transcription?.transcript || data.transcription || '',
+        words: data.transcription?.words || null,
+        botId: botId,
+        receivedAt: Date.now()
+      };
+      
+      console.log('[Webhook] Transcript update:', {
+        speaker: transcriptEntry.speakerName,
+        text: transcriptEntry.transcription.substring(0, 50) + '...',
+        timestamp: transcriptEntry.timestamp
+      });
+      
+      // Store transcript entry by bot ID
+      if (!webhookTranscripts.has(botId)) {
+        webhookTranscripts.set(botId, []);
+      }
+      const transcripts = webhookTranscripts.get(botId);
+      transcripts.push(transcriptEntry);
+      
+      // Keep only last 1000 entries per bot to prevent memory issues
+      if (transcripts.length > 1000) {
+        transcripts.shift();
+      }
+      
+    } else if (trigger === 'bot.state_change') {
+      // Handle bot state change
+      console.log('[Webhook] Bot state change:', {
+        botId: botId,
+        oldState: data.old_state,
+        newState: data.new_state,
+        eventType: data.event_type
+      });
+      
+      // Store bot state
+      if (!webhookTranscripts.has(botId)) {
+        webhookTranscripts.set(botId, []);
+      }
+      const transcripts = webhookTranscripts.get(botId);
+      transcripts.push({
+        type: 'bot_state_change',
+        oldState: data.old_state,
+        newState: data.new_state,
+        eventType: data.event_type,
+        timestamp: data.created_at || Date.now(),
+        botId: botId,
+        receivedAt: Date.now()
+      });
+    }
+    
+    // Always return 200 OK to acknowledge receipt
+    res.status(200).json({ received: true, timestamp: new Date().toISOString() });
+    
+  } catch (err) {
+    console.error('[Webhook] Error processing webhook:', err);
+    res.status(500).json({ error: 'webhook_error', message: err.message });
+  }
+});
+
+// Get webhook transcripts for a bot (polling endpoint for frontend)
+app.get('/api/webhooks/attendee/transcripts/:botId', (req, res) => {
+  try {
+    const botId = req.params.botId;
+    const since = parseInt(req.query.since) || 0; // Get entries after this timestamp
+    
+    const transcripts = webhookTranscripts.get(botId) || [];
+    
+    // Filter transcripts received after 'since' timestamp
+    const newTranscripts = transcripts.filter(t => t.receivedAt > since);
+    
+    res.json({
+      botId: botId,
+      transcripts: newTranscripts,
+      total: transcripts.length,
+      latestTimestamp: transcripts.length > 0 ? transcripts[transcripts.length - 1].receivedAt : 0
+    });
+  } catch (err) {
+    console.error('[Webhook] Error getting transcripts:', err);
+    res.status(500).json({ error: 'error', message: err.message });
+  }
+});
+
+// Clear transcripts for a bot
+app.delete('/api/webhooks/attendee/transcripts/:botId', (req, res) => {
+  try {
+    const botId = req.params.botId;
+    webhookTranscripts.delete(botId);
+    res.json({ success: true, message: 'Transcripts cleared' });
+  } catch (err) {
+    console.error('[Webhook] Error clearing transcripts:', err);
+    res.status(500).json({ error: 'error', message: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Meet proxy listening on http://localhost:${PORT}`);
+  if (ATTENDEE_WEBHOOK_SECRET) {
+    console.log('[Webhook] Attendee webhook signature verification enabled');
+  } else {
+    console.log('[Webhook] WARNING: ATTENDEE_WEBHOOK_SECRET not set, webhook verification disabled');
+  }
 });

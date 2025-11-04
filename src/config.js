@@ -11,7 +11,7 @@ export const config = {
   DEEPGRAM_API_KEY: '306114cbf5e0f315e34cc259af3d16b9fe000992',
   
   // Attendee.ai API Key (get this from Attendee.dev dashboard)
-  ATTENDEE_API_KEY: process?.env?.ATTENDEE_API_KEY || 'FMviPsiy3HSqx50aA51S4cFuTx868JBB',
+  ATTENDEE_API_KEY: process?.env?.ATTENDEE_API_KEY || 'iNTT7LNLA09cjy8uxwoaquRqrhYrmmaM',
   
   // URLs for your add-on pages
   MAIN_STAGE_URL: window.location.origin + '/mainstage.html',

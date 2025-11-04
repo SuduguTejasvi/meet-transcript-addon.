@@ -17,6 +17,7 @@ let mainStageClient;
 let participants = new Map();
 let transcriptContainer;
 let isTranscribing = false;
+let transcriptBuffer = [];
 let transcriptionManager = null;
 let attendeeIntegration = null;
 let googleMeetTranscriptAPI = null;
@@ -203,6 +204,110 @@ function handleGoogleMeetTranscriptUpdate(entry) {
   line.style.fontStyle = entry.isFinal === false ? 'italic' : 'normal';
   container.appendChild(line);
   container.scrollTop = container.scrollHeight;
+  // Keep a plain-text buffer for AI
+  transcriptBuffer.push(`${speaker}: ${transcription}`);
+}
+
+/**
+ * Initialize Attendee Integration for live transcription
+ */
+function initializeAttendeeIntegration() {
+  console.log('Initializing Attendee Integration...');
+  
+  try {
+    if (!attendeeApiKey) {
+      console.warn('⚠️ Attendee API key not found. Attendee transcription will not be available.');
+      return;
+    }
+    
+    // Get webhook URL from credentials or environment
+    // For local development with ngrok: https://your-ngrok-url.ngrok.io/api/webhooks/attendee
+    // For production: https://your-domain.com/api/webhooks/attendee
+    const webhookUrl = credentials?.attendeeWebhookUrl || 
+                      (typeof process !== 'undefined' && process.env?.ATTENDEE_WEBHOOK_URL) ||
+                      null;
+    
+    // Create AttendeeIntegration instance
+    attendeeIntegration = new AttendeeIntegration(
+      attendeeApiKey,
+      {
+        ...credentials,
+        proxyServerUrl: credentials?.proxyServerUrl || 'http://localhost:8787'
+      },
+      {
+        sidePanelClient: sidePanelClient,
+        mainStageClient: mainStageClient
+      }
+    );
+    
+    // Set webhook URL if configured (for real-time updates)
+    if (webhookUrl) {
+      attendeeIntegration.setWebhookUrl(webhookUrl);
+      console.log('✅ Webhook URL configured for real-time transcript updates');
+    } else {
+      console.log('ℹ️ No webhook URL configured, will use API polling (slower but works without webhook setup)');
+    }
+    
+    // Set up event handlers for transcript updates
+    attendeeIntegration.onTranscriptUpdate = (entry) => {
+      handleAttendeeTranscriptUpdate(entry);
+    };
+    
+    attendeeIntegration.onBotStatusChange = (status) => {
+      console.log('Attendee bot status changed:', status);
+      showStatus(`Attendee bot: ${status.status}`, status.status === 'active' ? 'success' : 'info');
+    };
+    
+    attendeeIntegration.onError = (error) => {
+      console.error('Attendee Integration error:', error);
+      showStatus('Attendee error: ' + error.message, 'error');
+    };
+    
+    console.log('✅ Attendee Integration initialized successfully');
+  } catch (error) {
+    console.error('Error initializing Attendee Integration:', error);
+    showStatus('Error initializing Attendee: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Handle real-time transcript updates from Attendee
+ */
+function handleAttendeeTranscriptUpdate(entry) {
+  const { speakerName, transcription, timestamp, duration } = entry;
+  
+  if (!transcription || !transcription.trim()) return;
+  
+  // Display in transcript container
+  const container = document.getElementById('transcript-container');
+  if (container) {
+    const line = document.createElement('div');
+    line.style.cssText = `
+      margin-bottom: 8px;
+      padding: 8px;
+      background: #f8f9fa;
+      border-left: 3px solid #9c27b0;
+      border-radius: 4px;
+    `;
+    
+    const speaker = speakerName || 'Speaker';
+    const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : '';
+    
+    line.innerHTML = `
+      <div style="font-weight: 600; color: #9c27b0; font-size: 13px; margin-bottom: 4px;">
+        ${speaker} ${timeStr ? `<span style="color: #5f6368; font-weight: normal; font-size: 11px;">(${timeStr})</span>` : ''}
+      </div>
+      <div style="color: #202124; font-size: 14px; line-height: 1.5;">
+        ${transcription}
+      </div>
+    `;
+    
+    container.appendChild(line);
+    container.scrollTop = container.scrollHeight;
+  }
+  
+  // Keep a plain-text buffer for AI
+  transcriptBuffer.push(`${speakerName || 'Speaker'}: ${transcription}`);
 }
 
 /**
@@ -262,6 +367,27 @@ export async function setUpAddon() {
     
     // Initialize Google Meet Transcript API after clients are set up
     initializeGoogleMeetTranscriptAPI();
+
+    // Initialize Attendee Integration
+    initializeAttendeeIntegration();
+
+    // Wire Attendee button listeners
+    const startAttendeeBtn = document.getElementById('start-attendee-transcript');
+    const stopAttendeeBtn = document.getElementById('stop-attendee-transcript');
+    
+    if (startAttendeeBtn) {
+      startAttendeeBtn.addEventListener('click', startAttendeeTranscript);
+    }
+    
+    if (stopAttendeeBtn) {
+      stopAttendeeBtn.addEventListener('click', stopAttendeeTranscript);
+    }
+
+    // Wire AI send button
+    const aiSendBtn = document.getElementById('ai-send-btn');
+    if (aiSendBtn) {
+      aiSendBtn.addEventListener('click', sendQuestionToAI);
+    }
     
     console.log('Add-on initialized successfully');
     showStatus('Add-on loaded successfully!', 'success');
@@ -1210,6 +1336,137 @@ async function stopTranscript() {
   }
 }
 
+/**
+ * Start Attendee transcription
+ */
+async function startAttendeeTranscript() {
+  console.log('Starting Attendee transcription...');
+  
+  try {
+    // Check if Attendee Integration is initialized
+    if (!attendeeIntegration) {
+      throw new Error('Attendee Integration not initialized. Please check your API key configuration.');
+    }
+    
+    // Update UI
+    const startBtn = document.getElementById('start-attendee-transcript');
+    const stopBtn = document.getElementById('stop-attendee-transcript');
+    const status = document.getElementById('status-message');
+    
+    if (startBtn) startBtn.disabled = true;
+    if (stopBtn) stopBtn.disabled = false;
+    if (status) {
+      status.style.display = 'block';
+      status.className = 'status-message info';
+      status.textContent = '🔄 Creating Attendee bot and joining meeting...';
+    }
+    
+    // Get webhook URL from input if provided
+    const webhookUrlInput = document.getElementById('webhook-url-input');
+    if (webhookUrlInput && webhookUrlInput.value.trim()) {
+      const webhookUrl = webhookUrlInput.value.trim();
+      if (webhookUrl.startsWith('https://')) {
+        attendeeIntegration.setWebhookUrl(webhookUrl);
+        console.log('✅ Using webhook URL from input:', webhookUrl);
+      } else {
+        console.warn('⚠️ Webhook URL must start with https://');
+      }
+    }
+    
+    // Get meeting URL
+    let meetingUrl = await attendeeIntegration.getMeetingUrl();
+    
+    // If automatic detection fails, show manual input
+    if (!meetingUrl) {
+      const meetingUrlInput = document.getElementById('meeting-url-input');
+      if (meetingUrlInput && meetingUrlInput.value.trim()) {
+        meetingUrl = meetingUrlInput.value.trim();
+        // Ensure it's a full URL
+        if (!meetingUrl.includes('http')) {
+          meetingUrl = `https://meet.google.com/${meetingUrl.replace(/^\/+|\/+$/g, '')}`;
+        }
+      } else {
+        // Show manual input container
+        const meetingUrlContainer = document.getElementById('meeting-url-input-container');
+        if (meetingUrlContainer) {
+          meetingUrlContainer.style.display = 'block';
+        }
+        throw new Error('Could not detect meeting URL. Please enter it manually.');
+      }
+    }
+    
+    // Start transcription (this creates the bot and starts polling/webhook polling)
+    await attendeeIntegration.startTranscription(meetingUrl);
+    
+    // Hide manual input if successful
+    const meetingUrlContainer = document.getElementById('meeting-url-input-container');
+    if (meetingUrlContainer) meetingUrlContainer.style.display = 'none';
+    
+    const mode = attendeeIntegration.useWebhooks ? 'webhooks' : 'API polling';
+    if (status) {
+      status.className = 'status-message success';
+      status.textContent = `🎙️ Attendee transcription active (${mode}) - receiving live transcripts`;
+    }
+    
+    console.log('✅ Attendee transcription started successfully with', mode);
+    
+  } catch (error) {
+    console.error('Error starting Attendee transcription:', error);
+    showStatus('Error starting Attendee transcription: ' + error.message, 'error');
+    
+    // Reset UI on error
+    const startBtn = document.getElementById('start-attendee-transcript');
+    const stopBtn = document.getElementById('stop-attendee-transcript');
+    const status = document.getElementById('status-message');
+    
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
+    if (status) {
+      status.className = 'status-message error';
+      status.textContent = '❌ Failed to start Attendee transcription: ' + error.message;
+    }
+    
+    // Show manual input if URL detection failed
+    if (error.message.includes('Could not detect') || error.message.includes('meeting URL')) {
+      const meetingUrlContainer = document.getElementById('meeting-url-input-container');
+      if (meetingUrlContainer) {
+        meetingUrlContainer.style.display = 'block';
+      }
+    }
+  }
+}
+
+/**
+ * Stop Attendee transcription
+ */
+async function stopAttendeeTranscript() {
+  console.log('Stopping Attendee transcription...');
+  
+  try {
+    if (attendeeIntegration && attendeeIntegration.isActive) {
+      await attendeeIntegration.stopTranscription();
+    }
+    
+    // Update UI
+    const startBtn = document.getElementById('start-attendee-transcript');
+    const stopBtn = document.getElementById('stop-attendee-transcript');
+    const status = document.getElementById('status-message');
+    
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
+    if (status) {
+      status.className = 'status-message error';
+      status.textContent = '⏹️ Attendee transcription stopped';
+    }
+    
+    console.log('✅ Attendee transcription stopped successfully');
+    
+  } catch (error) {
+    console.error('Error stopping Attendee transcription:', error);
+    showStatus('Error stopping Attendee transcription: ' + error.message, 'error');
+  }
+}
+
 
 /**
  * Show status message in side panel
@@ -1225,6 +1482,46 @@ function showStatus(message, type = 'info') {
     setTimeout(() => {
       statusElement.style.display = 'none';
     }, 5000);
+  }
+}
+
+async function sendQuestionToAI() {
+  try {
+    const questionInput = document.getElementById('ai-question-input');
+    const answerEl = document.getElementById('ai-answer');
+    if (!questionInput || !answerEl) return;
+    const userQuestion = questionInput.value.trim();
+    if (!userQuestion) {
+      answerEl.style.display = 'block';
+      answerEl.textContent = 'Please enter a question.';
+      return;
+    }
+    const transcriptText = transcriptBuffer.join('\n');
+    answerEl.style.display = 'block';
+    answerEl.textContent = 'Asking AI...';
+    const prompt = `You are an assistant. Answer the question using ONLY the following meeting transcript. If unsure, say you are unsure.\n\nTranscript:\n${transcriptText}\n\nQuestion: ${userQuestion}`;
+    const res = await fetch('http://localhost:8787/api/askClaude', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Pass user-provided key securely from UI/session in real apps; provided here per request
+        'x-claude-key': 'ANTHROPIC_API_KEY_PLACEHOLDER'
+      },
+      body: JSON.stringify({ prompt })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      answerEl.textContent = `AI request failed: ${res.status} ${txt}`;
+      return;
+    }
+    const data = await res.json();
+    answerEl.textContent = data.answer || 'No answer received.';
+  } catch (err) {
+    const answerEl = document.getElementById('ai-answer');
+    if (answerEl) {
+      answerEl.style.display = 'block';
+      answerEl.textContent = 'AI error: ' + (err && err.message ? err.message : String(err));
+    }
   }
 }
 

@@ -287,6 +287,19 @@
                 </button>
             </div>
             <div id="auth-status" style="display: none; margin-bottom: 10px; padding: 10px; border-radius: 8px; font-size: 14px;"></div>
+            <div id="webhook-url-container" style="margin-bottom: 10px; padding: 10px; background: #f0f4f8; border-radius: 8px; border-left: 3px solid #9c27b0;">
+                <label for="webhook-url-input" style="display: block; margin-bottom: 5px; font-size: 13px; color: #202124; font-weight: 500;">
+                    🎙️ Attendee Webhook URL (Optional - for real-time updates):
+                </label>
+                <input type="text" id="webhook-url-input" 
+                       placeholder="https://your-ngrok-url.ngrok.io/api/webhooks/attendee" 
+                       style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; margin-bottom: 5px;">
+                <small style="display: block; color: #5f6368; font-size: 11px; line-height: 1.4;">
+                    <strong>For local development:</strong> Use ngrok to expose your proxy server (port 8787).<br>
+                    <strong>Without webhook:</strong> System will use API polling (works but slower).<br>
+                    <em>Leave empty to use API polling mode.</em>
+                </small>
+            </div>
             <div id="space-name-input-container" style="margin-bottom: 10px;">
                 <label for="space-name-input" style="display: block; margin-bottom: 5px; font-size: 14px; color: #5f6368;">
                     Meet space name (spaces/...):
@@ -317,11 +330,25 @@
             <button id="stop-transcript" class="btn btn-danger" disabled>
                 ⏹️ Stop Transcript
             </button>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                <button id="start-attendee-transcript" class="btn btn-success" style="background: #9c27b0;">
+                    🎙️ Start Attendee Transcript
+                </button>
+                <button id="stop-attendee-transcript" class="btn btn-danger" disabled>
+                    ⏹️ Stop Attendee Transcript
+                </button>
+            </div>
         </div>
 
         <div class="participants-card">
             <h3>Transcripts</h3>
             <div id="transcript-container" style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px; height:220px; overflow-y:auto; font-family:monospace; font-size:13px; white-space:pre-wrap;"></div>
+            <div style="margin-top:10px;">
+                <input id="ai-question-input" type="text" placeholder="Ask a question about the transcript..." 
+                       style="width:100%; padding:8px; border:1px solid #dadce0; border-radius:6px; font-size:14px; margin-bottom:8px;">
+                <button id="ai-send-btn" class="btn" style="width:100%; background:#1a73e8; color:white;">Send Question</button>
+                <div id="ai-answer" style="margin-top:8px; font-size:13px; color:#202124; background:#f8f9fa; border:1px solid #e0e0e0; border-radius:6px; padding:8px; display:none;"></div>
+            </div>
         </div>
 
         <div class="footer">
@@ -340,7 +367,7 @@
         // Set your configuration values here
         window.process.env.CLOUD_PROJECT_NUMBER = '409997382473';
         window.process.env.DEEPGRAM_API_KEY = '306114cbf5e0f315e34cc259af3d16b9fe000992';
-        window.process.env.ATTENDEE_API_KEY = 'FMviPsiy3HSqx50aA51S4cFuTx868JBB'; // Set your Attendee.ai API key here
+        window.process.env.ATTENDEE_API_KEY = 'iNTT7LNLA09cjy8uxwoaquRqrhYrmmaM'; // Set your Attendee.ai API key here
         
         // For local development, use localhost; for production, use GitHub
         const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
