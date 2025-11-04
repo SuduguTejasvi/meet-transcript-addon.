@@ -472,20 +472,13 @@ export class AttendeeIntegration {
 
       // Add webhooks if configured (check both webhookUrl and try to construct from proxy)
       let effectiveWebhookUrl = this.webhookUrl;
-      
-      // Also check credentials for webhook URL
-      if (!effectiveWebhookUrl && this.credentials?.attendeeWebhookUrl) {
-        effectiveWebhookUrl = this.credentials.attendeeWebhookUrl;
-        console.log('[Attendee] Using webhook URL from credentials:', effectiveWebhookUrl);
-      }
-      
       if (!effectiveWebhookUrl && this.useProxy && this.proxyServerUrl) {
         try {
           const proxyUrl = new URL(this.proxyServerUrl);
           // For localhost, we can't use webhooks (they need HTTPS), but log it
           if (proxyUrl.protocol === 'https:') {
             effectiveWebhookUrl = `${this.proxyServerUrl}/api/webhooks/attendee`;
-            console.log('[Attendee] ✅ Auto-configuring webhook URL from HTTPS proxy:', effectiveWebhookUrl);
+            console.log('[Attendee] Will use proxy webhook URL:', effectiveWebhookUrl);
           } else {
             console.log('[Attendee] Proxy is HTTP (localhost), webhooks require HTTPS. Using API polling instead.');
           }
@@ -501,12 +494,8 @@ export class AttendeeIntegration {
             triggers: ['transcript.update', 'bot.state_change']
           }
         ];
-        console.log('[Attendee] ✅ Webhooks configured for live transcripts:', effectiveWebhookUrl);
+        console.log('Using webhooks for real-time updates:', effectiveWebhookUrl);
         this.setWebhookUrl(effectiveWebhookUrl);
-        this.useWebhooks = true; // CRITICAL: Enable webhooks flag
-      } else {
-        console.warn('[Attendee] ⚠️ No webhook URL configured. Will use API polling (slower, delayed updates).');
-        console.warn('[Attendee]    Transcripts will only appear after participant pauses.');
       }
 
       // Use proxy server to avoid CORS issues in browser
@@ -711,14 +700,6 @@ export class AttendeeIntegration {
       // Otherwise, construct webhook URL from proxy server if available
       let effectiveWebhookUrl = this.webhookUrl;
       
-      // Also check credentials for webhook URL
-      if (!effectiveWebhookUrl && this.credentials?.attendeeWebhookUrl) {
-        effectiveWebhookUrl = this.credentials.attendeeWebhookUrl;
-        this.setWebhookUrl(effectiveWebhookUrl);
-        this.useWebhooks = true;
-        console.log('[Attendee] Using webhook URL from credentials:', effectiveWebhookUrl);
-      }
-      
       if (!effectiveWebhookUrl && this.useProxy && this.proxyServerUrl) {
         // Try to construct webhook URL from proxy server
         // For local development, we'd need ngrok or similar
@@ -728,23 +709,20 @@ export class AttendeeIntegration {
           // Only use proxy webhook if it's HTTPS (production)
           if (proxyUrl.protocol === 'https:') {
             effectiveWebhookUrl = `${this.proxyServerUrl}/api/webhooks/attendee`;
-            console.log('[Attendee] ✅ Using proxy server webhook URL for live transcripts:', effectiveWebhookUrl);
+            console.log('[Attendee] Using proxy server webhook URL:', effectiveWebhookUrl);
             this.setWebhookUrl(effectiveWebhookUrl);
-            this.useWebhooks = true; // CRITICAL: Enable webhooks
           }
         } catch (e) {
           // Invalid URL, skip
         }
       }
 
-      // Use webhooks if configured, otherwise fall back to API polling
       if (this.useWebhooks && effectiveWebhookUrl) {
-        console.log('[Attendee] 🎙️ Starting webhook-based transcription (real-time updates)...');
+        console.log('Starting webhook-based transcription polling...');
         // Poll webhook endpoint on proxy server
         this.startWebhookPolling();
       } else {
-        console.log('[Attendee] ⚠️ Starting API-based transcription polling (slower, delayed updates)...');
-        console.log('[Attendee]    Note: API polling only returns transcripts after participant pauses.');
+        console.log('Starting API-based transcription polling...');
         // Poll Attendee API directly
         this.startPolling();
       }
@@ -936,6 +914,16 @@ export class AttendeeIntegration {
         console.log(`[Attendee] Poll #${this.pollCount}: Found ${entries.length} transcript entries`);
         if (entries.length > 0) {
           console.log('[Attendee] Sample entry:', JSON.stringify(entries[0], null, 2));
+        } else if (this.pollCount <= 10) {
+          // For first 10 polls, also check bot info to see if there are events
+          try {
+            const botInfo = await this.getBotInfo();
+            if (botInfo.events && botInfo.events.length > 0) {
+              console.log(`[Attendee] Bot has ${botInfo.events.length} events but transcript endpoint returned empty`);
+            }
+          } catch (e) {
+            // Ignore errors checking bot info during polling
+          }
         }
       }
 
@@ -957,11 +945,27 @@ export class AttendeeIntegration {
         this.processTranscriptEntries(entries);
       } else if (this.pollCount > 10 && this.pollCount % 10 === 0) {
         // Log periodically if no transcripts after many polls
-        console.warn(`[Attendee] ⚠️ Still no transcripts after ${this.pollCount} polls. Transcription state: in_progress. This may indicate:`);
-        console.warn('[Attendee]   1. No one is speaking (even if not muted)');
-        console.warn('[Attendee]   2. Audio delay or buffering');
-        console.warn('[Attendee]   3. API endpoint issue - check Attendee.ai dashboard');
-        console.warn('[Attendee]   4. Try speaking clearly into the microphone');
+        console.warn(`[Attendee] ⚠️ Still no transcripts after ${this.pollCount} polls. Transcription state: in_progress.`);
+        console.warn('[Attendee] Possible reasons:');
+        console.warn('[Attendee]   1. Deepgram buffers audio - transcripts only appear AFTER pauses (5-10 seconds)');
+        console.warn('[Attendee]   2. Try speaking in complete sentences and pausing between them');
+        console.warn('[Attendee]   3. No one is speaking (even if not muted)');
+        console.warn('[Attendee]   4. Audio quality issues - speak clearly into microphone');
+        console.warn('[Attendee]   5. For real-time transcripts, use webhooks (requires HTTPS URL via ngrok)');
+        console.warn('[Attendee]   6. Check Attendee.ai dashboard for bot status and errors');
+        
+        // Also check bot info one more time
+        try {
+          const botInfo = await this.getBotInfo();
+          console.warn('[Attendee] Bot status:', {
+            state: botInfo.state,
+            transcription_state: botInfo.transcription_state,
+            events_count: botInfo.events?.length || 0,
+            has_events: !!(botInfo.events && botInfo.events.length > 0)
+          });
+        } catch (e) {
+          // Ignore
+        }
       }
     } catch (error) {
       console.error('[Attendee] Error polling transcript:', error);
@@ -1122,7 +1126,21 @@ export class AttendeeIntegration {
         throw new Error(`Failed to get bot info: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      const botInfo = await response.json();
+      
+      // Log bot events if they exist (transcripts might be in events)
+      if (botInfo.events && Array.isArray(botInfo.events) && botInfo.events.length > 0) {
+        const transcriptEvents = botInfo.events.filter(e => 
+          e.type === 'transcript.update' || e.trigger === 'transcript.update' || 
+          e.event_type === 'transcript.update' || e.data?.transcription
+        );
+        if (transcriptEvents.length > 0) {
+          console.log(`[Attendee] Found ${transcriptEvents.length} transcript event(s) in bot events`);
+          console.log('[Attendee] Sample event:', JSON.stringify(transcriptEvents[0], null, 2));
+        }
+      }
+      
+      return botInfo;
     } catch (error) {
       console.error('Error getting bot info:', error);
       throw error;

@@ -75,25 +75,7 @@ app.use(cors({
 }));
 
 // Ensure OPTIONS preflight responses include CORS headers
-// Explicitly handle OPTIONS preflight for all routes (for ngrok compatibility)
-app.use((req, res, next) => {
-  if (req.method === 'OPTIONS') {
-    const origin = req.headers.origin;
-    if (ALLOWED_ORIGINS.includes(origin)) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, X-Access-Token, x-access-token, X-Project-Number, x-project-number, x-claude-key, X-CLAUDE-KEY, x-attendee-api-key, X-ATTENDEE-API-KEY, Authorization');
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
-      res.status(200).send();
-    } else {
-      res.status(403).send('Origin not allowed');
-    }
-  } else {
-    next();
-  }
-});
-
+// NOTE: cors() middleware above responds to preflight automatically; no explicit app.options route
 app.use(express.json());
 
 // Root route - helpful message
@@ -448,6 +430,34 @@ app.get('/api/attendee/bots/:botId/transcript', async (req, res) => {
 
     const data = await response.json();
     
+    // Also check bot info to see if transcripts might be in events
+    if (requestCount <= 3 && Array.isArray(data) && data.length === 0) {
+      try {
+        const botInfoResponse = await fetch(`https://app.attendee.dev/api/v1/bots/${botId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Token ${apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (botInfoResponse.ok) {
+          const botInfo = await botInfoResponse.json();
+          if (botInfo.events && Array.isArray(botInfo.events) && botInfo.events.length > 0) {
+            const transcriptEvents = botInfo.events.filter(e => 
+              e.type === 'transcript.update' || e.trigger === 'transcript.update' || 
+              e.event_type === 'transcript.update' || e.data?.transcription
+            );
+            if (transcriptEvents.length > 0) {
+              console.log(`[Proxy] ⚠️ Found ${transcriptEvents.length} transcript event(s) in bot.events but transcript endpoint is empty`);
+              console.log('[Proxy]    This suggests transcripts might be in events, not the transcript endpoint');
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore errors checking bot info
+      }
+    }
+    
     // Log response for first few requests to debug API format
     if (requestCount <= 5) {
       console.log(`[Proxy] Transcript API response (status ${response.status}):`, {
@@ -464,6 +474,7 @@ app.get('/api/attendee/bots/:botId/transcript', async (req, res) => {
       } else if (Array.isArray(data) && data.length === 0) {
         console.log('[Proxy] ⚠️ Empty array returned - transcription may be in progress but no audio detected yet');
         console.log('[Proxy]    This is normal if: no one is speaking, audio is muted, or there is a delay');
+        console.log('[Proxy]    With Deepgram transcription, transcripts may only appear after pauses');
       }
     }
     
