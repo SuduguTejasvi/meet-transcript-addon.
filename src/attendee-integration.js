@@ -569,6 +569,11 @@ export class AttendeeIntegration {
       });
 
       if (!response.ok) {
+        // 404 is normal when bot first starts (no transcripts yet)
+        if (response.status === 404) {
+          console.log('[Attendee] No transcripts yet (bot may have just started)');
+          return [];
+        }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(`Failed to get transcript: ${response.status} ${response.statusText}. ${errorData.message || errorData.detail || ''}`);
       }
@@ -602,8 +607,30 @@ export class AttendeeIntegration {
       this.isActive = true;
       this.transcriptEntries = [];
       this.lastWebhookTimestamp = 0;
+      this.pollCount = 0; // Reset poll count
 
-      if (this.useWebhooks && this.webhookUrl) {
+      // If webhook URL is configured, use webhook polling
+      // Otherwise, construct webhook URL from proxy server if available
+      let effectiveWebhookUrl = this.webhookUrl;
+      
+      if (!effectiveWebhookUrl && this.useProxy && this.proxyServerUrl) {
+        // Try to construct webhook URL from proxy server
+        // For local development, we'd need ngrok or similar
+        // For production, proxy should be publicly accessible
+        try {
+          const proxyUrl = new URL(this.proxyServerUrl);
+          // Only use proxy webhook if it's HTTPS (production)
+          if (proxyUrl.protocol === 'https:') {
+            effectiveWebhookUrl = `${this.proxyServerUrl}/api/webhooks/attendee`;
+            console.log('[Attendee] Using proxy server webhook URL:', effectiveWebhookUrl);
+            this.setWebhookUrl(effectiveWebhookUrl);
+          }
+        } catch (e) {
+          // Invalid URL, skip
+        }
+      }
+
+      if (this.useWebhooks && effectiveWebhookUrl) {
         console.log('Starting webhook-based transcription polling...');
         // Poll webhook endpoint on proxy server
         this.startWebhookPolling();
@@ -615,6 +642,26 @@ export class AttendeeIntegration {
 
       if (this.onBotStatusChange) {
         this.onBotStatusChange({ status: 'active', botId: this.botId });
+      }
+
+      // Log initial state
+      console.log('[Attendee] Transcription active. Waiting for transcripts...');
+      if (this.onTranscriptUpdate) {
+        // Show a placeholder message if UI supports it
+        const placeholderEntry = {
+          speakerName: 'System',
+          transcription: '🎙️ Bot is active. Waiting for participants to speak...',
+          timestamp: Date.now(),
+          duration: 0,
+          isFinal: true,
+          isPlaceholder: true
+        };
+        // Only show placeholder if no transcripts yet
+        setTimeout(() => {
+          if (this.transcriptEntries.length === 0) {
+            this.onTranscriptUpdate(placeholderEntry);
+          }
+        }, 1000);
       }
 
       return true;
@@ -740,12 +787,26 @@ export class AttendeeIntegration {
 
       const transcriptData = await this.getTranscript();
       
-      // Handle different response formats
+      // Handle different response formats from Attendee.ai API
       let entries = [];
       if (Array.isArray(transcriptData)) {
         entries = transcriptData;
-      } else if (transcriptData.entries || transcriptData.transcript) {
-        entries = transcriptData.entries || transcriptData.transcript || [];
+      } else if (transcriptData.entries) {
+        entries = transcriptData.entries;
+      } else if (transcriptData.transcript) {
+        entries = Array.isArray(transcriptData.transcript) ? transcriptData.transcript : [transcriptData.transcript];
+      } else if (transcriptData.data && Array.isArray(transcriptData.data)) {
+        entries = transcriptData.data;
+      }
+
+      // Log for debugging (first few calls)
+      if (this.pollCount === undefined) this.pollCount = 0;
+      this.pollCount++;
+      if (this.pollCount <= 3 || entries.length > 0) {
+        console.log(`[Attendee] Poll #${this.pollCount}: Found ${entries.length} transcript entries`);
+        if (entries.length > 0) {
+          console.log('[Attendee] Sample entry:', JSON.stringify(entries[0], null, 2));
+        }
       }
 
       // Process new entries
@@ -762,41 +823,82 @@ export class AttendeeIntegration {
    * Process transcript entries and emit updates
    */
   processTranscriptEntries(entries) {
-    // Track which entries we've already processed
-    const existingCount = this.transcriptEntries.length;
-    const newEntries = entries.slice(existingCount);
+    if (!entries || entries.length === 0) {
+      return;
+    }
 
-    // Update our stored entries
-    this.transcriptEntries = entries;
+    // Use a more robust method to track processed entries
+    // Use timestamp_ms as unique identifier instead of array index
+    const processedTimestamps = new Set(
+      this.transcriptEntries.map(e => e.timestamp || e.timestamp_ms || `${e.speakerName}-${e.transcription}`)
+    );
 
-      // Emit updates for new entries
-      newEntries.forEach(entry => {
-        if (this.onTranscriptUpdate) {
-          // Extract transcript text - handle nested structure from Attendee API
-          let transcriptText = '';
-          if (entry.transcription) {
-            // Handle nested transcription object: { transcript: "text", words: [...] }
-            transcriptText = typeof entry.transcription === 'string' 
-              ? entry.transcription 
-              : (entry.transcription.transcript || entry.transcription.text || '');
-          } else {
-            // Fallback to direct text field
-            transcriptText = entry.text || entry.transcript || '';
-          }
-          
-          // Format entry according to Attendee.ai API response
-          const formattedEntry = {
-            speakerName: entry.speaker_name || entry.speakerName || 'Unknown',
-            speakerUuid: entry.speaker_uuid || entry.speakerUuid || null,
-            timestamp: entry.timestamp_ms || entry.timestamp || 0,
-            duration: entry.duration_ms || entry.duration || 0,
-            transcription: transcriptText,
-            isFinal: entry.is_final !== false // Default to true for transcript entries
-          };
+    // Find new entries by comparing timestamps or content
+    const newEntries = entries.filter(entry => {
+      const timestamp = entry.timestamp_ms || entry.timestamp || 0;
+      const speakerName = entry.speaker_name || entry.speakerName || 'Unknown';
+      
+      // Extract transcript text to create unique identifier
+      let transcriptText = '';
+      if (entry.transcription) {
+        transcriptText = typeof entry.transcription === 'string' 
+          ? entry.transcription 
+          : (entry.transcription.transcript || entry.transcription.text || '');
+      } else {
+        transcriptText = entry.text || entry.transcript || '';
+      }
+      
+      const uniqueId = timestamp || `${speakerName}-${transcriptText}`;
+      return !processedTimestamps.has(uniqueId);
+    });
 
-          this.onTranscriptUpdate(formattedEntry);
+    if (newEntries.length === 0) {
+      return; // No new entries
+    }
+
+    console.log(`[Attendee] Processing ${newEntries.length} new transcript entries`);
+
+    // Process and emit new entries
+    newEntries.forEach(entry => {
+      if (this.onTranscriptUpdate) {
+        // Extract transcript text - handle nested structure from Attendee API
+        let transcriptText = '';
+        if (entry.transcription) {
+          // Handle nested transcription object: { transcript: "text", words: [...] }
+          transcriptText = typeof entry.transcription === 'string' 
+            ? entry.transcription 
+            : (entry.transcription.transcript || entry.transcription.text || '');
+        } else {
+          // Fallback to direct text field
+          transcriptText = entry.text || entry.transcript || '';
         }
-      });
+        
+        // Skip empty transcripts
+        if (!transcriptText || !transcriptText.trim()) {
+          return;
+        }
+        
+        // Format entry according to Attendee.ai API response
+        const formattedEntry = {
+          speakerName: entry.speaker_name || entry.speakerName || 'Unknown',
+          speakerUuid: entry.speaker_uuid || entry.speakerUuid || null,
+          timestamp: entry.timestamp_ms || entry.timestamp || 0,
+          duration: entry.duration_ms || entry.duration || 0,
+          transcription: transcriptText.trim(),
+          isFinal: entry.is_final !== false // Default to true for transcript entries
+        };
+
+        // Store processed entry
+        this.transcriptEntries.push({
+          timestamp: formattedEntry.timestamp || `${formattedEntry.speakerName}-${formattedEntry.transcription}`,
+          speakerName: formattedEntry.speakerName,
+          transcription: formattedEntry.transcription
+        });
+
+        // Emit update
+        this.onTranscriptUpdate(formattedEntry);
+      }
+    });
   }
 
   /**

@@ -307,30 +307,53 @@ function initializeAttendeeIntegration() {
  * Handle real-time transcript updates from Attendee
  */
 function handleAttendeeTranscriptUpdate(entry) {
-  const { speakerName, transcription, timestamp, duration } = entry;
+  const { speakerName, transcription, timestamp, duration, isPlaceholder } = entry;
   
   if (!transcription || !transcription.trim()) return;
   
   // Display in transcript container
   const container = document.getElementById('transcript-container');
   if (container) {
+    // If this is a placeholder, replace existing placeholder if present
+    if (isPlaceholder) {
+      const existingPlaceholder = container.querySelector('[data-placeholder="true"]');
+      if (existingPlaceholder) {
+        existingPlaceholder.remove();
+      }
+    } else {
+      // Remove placeholder when real transcript arrives
+      const existingPlaceholder = container.querySelector('[data-placeholder="true"]');
+      if (existingPlaceholder) {
+        existingPlaceholder.remove();
+      }
+    }
+    
     const line = document.createElement('div');
     line.style.cssText = `
       margin-bottom: 8px;
       padding: 8px;
-      background: #f8f9fa;
-      border-left: 3px solid #9c27b0;
+      background: ${isPlaceholder ? '#fff3cd' : '#f8f9fa'};
+      border-left: 3px solid ${isPlaceholder ? '#ffc107' : '#9c27b0'};
       border-radius: 4px;
     `;
     
+    if (isPlaceholder) {
+      line.setAttribute('data-placeholder', 'true');
+    }
+    
     const speaker = speakerName || 'Speaker';
-    const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString() : '';
+    let timeStr = '';
+    if (timestamp && !isPlaceholder) {
+      // timestamp can be in milliseconds or seconds
+      const ts = timestamp > 1000000000000 ? timestamp : timestamp * 1000;
+      timeStr = new Date(ts).toLocaleTimeString();
+    }
     
     line.innerHTML = `
-      <div style="font-weight: 600; color: #9c27b0; font-size: 13px; margin-bottom: 4px;">
+      <div style="font-weight: 600; color: ${isPlaceholder ? '#856404' : '#9c27b0'}; font-size: 13px; margin-bottom: 4px;">
         ${speaker} ${timeStr ? `<span style="color: #5f6368; font-weight: normal; font-size: 11px;">(${timeStr})</span>` : ''}
       </div>
-      <div style="color: #202124; font-size: 14px; line-height: 1.5;">
+      <div style="color: ${isPlaceholder ? '#856404' : '#202124'}; font-size: 14px; line-height: 1.5; font-style: ${isPlaceholder ? 'italic' : 'normal'};">
         ${transcription}
       </div>
     `;
@@ -339,8 +362,10 @@ function handleAttendeeTranscriptUpdate(entry) {
     container.scrollTop = container.scrollHeight;
   }
   
-  // Keep a plain-text buffer for AI
-  transcriptBuffer.push(`${speakerName || 'Speaker'}: ${transcription}`);
+  // Only add to buffer if not a placeholder
+  if (!isPlaceholder) {
+    transcriptBuffer.push(`${speakerName || 'Speaker'}: ${transcription}`);
+  }
 }
 
 /**
@@ -1380,6 +1405,37 @@ async function startAttendeeTranscript() {
     if (!attendeeIntegration) {
       throw new Error('Attendee Integration not initialized. Please check your API key configuration.');
     }
+    
+    // Ensure transcript container exists and is visible
+    let container = document.getElementById('transcript-container');
+    if (!container) {
+      // Create container if it doesn't exist
+      container = document.createElement('div');
+      container.id = 'transcript-container';
+      container.style.cssText = `
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 12px;
+        height: 220px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+      `;
+      const participantsCard = document.querySelector('.participants-card');
+      if (participantsCard) {
+        const existingContainer = participantsCard.querySelector('#transcript-container');
+        if (existingContainer) {
+          existingContainer.replaceWith(container);
+        } else {
+          participantsCard.insertBefore(container, participantsCard.firstChild);
+        }
+      }
+    }
+    
+    // Clear any existing placeholder or content
+    container.innerHTML = '';
     
     // Update UI
     const startBtn = document.getElementById('start-attendee-transcript');
