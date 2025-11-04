@@ -19,6 +19,7 @@ export class AttendeeIntegration {
     this.useWebhooks = false; // Whether to use webhooks instead of polling
     this.webhookUrl = null; // Webhook URL for bot creation
     this.webhookPollInterval = null; // Polling interval for webhook transcripts
+    this.apiFallbackInterval = null; // API fallback polling interval (10 seconds)
     this.lastWebhookTimestamp = 0; // Last timestamp we fetched from webhook endpoint
     this.webhookRetryAttempted = false; // Track if we've tried retrying without webhooks
     
@@ -50,7 +51,7 @@ export class AttendeeIntegration {
     // Polling interval (in milliseconds) - poll every 1.5 seconds for more real-time updates
     this.pollIntervalMs = 1500;
     // Webhook polling interval (faster since webhooks are more real-time)
-    this.webhookPollIntervalMs = 500;
+    this.webhookPollIntervalMs = 300; // Reduced to 300ms for lower latency
   }
 
   /**
@@ -769,11 +770,15 @@ export class AttendeeIntegration {
       }
 
       // Use webhooks if available (faster and more real-time)
-      // Otherwise fall back to API polling
+      // Also add API polling as fallback every 10 seconds to catch any missed transcripts
       if (this.useWebhooks && effectiveWebhookUrl) {
         console.log('Starting webhook-based transcription polling (primary method)...');
         this.startWebhookPolling();
-        // Don't start API polling when webhooks are active to avoid duplicates
+        
+        // Add API polling as fallback every 10 seconds to reduce latency
+        // This ensures we catch transcripts even if webhooks are delayed
+        console.log('Starting API fallback polling (every 10 seconds)...');
+        this.startApiFallbackPolling();
       } else {
         console.log('Starting API-based transcription polling (no webhooks configured)...');
         this.startPolling();
@@ -912,6 +917,23 @@ export class AttendeeIntegration {
       console.error('Error polling webhook transcripts:', error);
       // Don't stop polling on error, just log it
     }
+  }
+
+  /**
+   * Start API polling as fallback (runs every 10 seconds when webhooks are active)
+   */
+  startApiFallbackPolling() {
+    if (this.apiFallbackInterval) {
+      clearInterval(this.apiFallbackInterval);
+    }
+
+    // Poll immediately
+    this.pollTranscript();
+
+    // Then poll at 10-second intervals as fallback
+    this.apiFallbackInterval = setInterval(() => {
+      this.pollTranscript();
+    }, 10000); // 10 seconds = 10000ms
   }
 
   /**
@@ -1159,6 +1181,12 @@ export class AttendeeIntegration {
       if (this.webhookPollInterval) {
         clearInterval(this.webhookPollInterval);
         this.webhookPollInterval = null;
+      }
+
+      // Stop API fallback polling
+      if (this.apiFallbackInterval) {
+        clearInterval(this.apiFallbackInterval);
+        this.apiFallbackInterval = null;
       }
 
       if (this.onBotStatusChange) {
