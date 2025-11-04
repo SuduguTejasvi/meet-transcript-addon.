@@ -42,6 +42,12 @@ async function initializeSecureCredentials() {
     claudeApiKey = credentials.claudeApiKey;
     mainStageUrl = credentials.mainStageUrl;
     
+    // Console log the Attendee API key for debugging
+    if (attendeeApiKey) {
+      console.log('🔑 Attendee API Key:', attendeeApiKey);
+      console.log('🔑 Attendee API Key length:', attendeeApiKey.length);
+    }
+    
     // Log security status (without exposing sensitive data)
     credentialManager.logSecurityStatus();
     
@@ -221,6 +227,10 @@ function initializeAttendeeIntegration() {
       console.warn('⚠️ Attendee API key not found. Attendee transcription will not be available.');
       return;
     }
+    
+    // Console log the API key being used
+    console.log('🔑 Using Attendee API Key:', attendeeApiKey);
+    console.log('🔑 Attendee API Key length:', attendeeApiKey.length);
     
     // Get webhook URL from credentials or environment
     // For local development with ngrok: https://your-ngrok-url.ngrok.io/api/webhooks/attendee

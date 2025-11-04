@@ -434,6 +434,10 @@ export class AttendeeIntegration {
       if (!this.apiKey) {
         throw new Error('Attendee.ai API key is required');
       }
+      
+      // Console log the API key being used for bot creation
+      console.log('🔑 Creating bot with Attendee API Key:', this.apiKey);
+      console.log('🔑 API Key length:', this.apiKey.length);
 
       // Get meeting URL if not provided
       if (!meetingUrl) {
