@@ -532,6 +532,10 @@ export class AttendeeIntegration {
       // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
       if (this.useProxy) {
         headers['x-attendee-api-key'] = this.apiKey;
+        // Add ngrok bypass header if using ngrok-free.app
+        if (this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+          headers['ngrok-skip-browser-warning'] = 'true';
+        }
         console.log('[Attendee] Using proxy server:', url);
       } else {
         headers['Authorization'] = `Token ${this.apiKey}`;
@@ -622,6 +626,10 @@ export class AttendeeIntegration {
       // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
       if (this.useProxy) {
         headers['x-attendee-api-key'] = this.apiKey;
+        // Add ngrok bypass header if using ngrok-free.app
+        if (this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+          headers['ngrok-skip-browser-warning'] = 'true';
+        }
       } else {
         headers['Authorization'] = `Token ${this.apiKey}`;
       }
@@ -837,11 +845,17 @@ export class AttendeeIntegration {
 
       const url = `${this.proxyServerUrl}/api/webhooks/attendee/transcripts/${this.botId}?since=${this.lastWebhookTimestamp}`;
       
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      // Add ngrok bypass header if using ngrok-free.app
+      if (this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+        headers['ngrok-skip-browser-warning'] = 'true';
+      }
+      
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: headers
       });
 
       if (!response.ok) {
@@ -1164,6 +1178,10 @@ export class AttendeeIntegration {
       // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
       if (this.useProxy) {
         headers['x-attendee-api-key'] = this.apiKey;
+        // Add ngrok bypass header if using ngrok-free.app
+        if (this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+          headers['ngrok-skip-browser-warning'] = 'true';
+        }
       } else {
         headers['Authorization'] = `Token ${this.apiKey}`;
       }

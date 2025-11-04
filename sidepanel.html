@@ -287,12 +287,24 @@
                 </button>
             </div>
             <div id="auth-status" style="display: none; margin-bottom: 10px; padding: 10px; border-radius: 8px; font-size: 14px;"></div>
+            <div id="proxy-url-container" style="margin-bottom: 10px; padding: 10px; background: #e8f0fe; border-radius: 8px; border-left: 3px solid #1a73e8;">
+                <label for="proxy-url-input" style="display: block; margin-bottom: 5px; font-size: 13px; color: #202124; font-weight: 500;">
+                    🌐 Proxy Server URL (Required for API calls):
+                </label>
+                <input type="text" id="proxy-url-input" 
+                       placeholder="https://16fbb9fb182a.ngrok-free.app" 
+                       style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; margin-bottom: 5px;">
+                <small style="display: block; color: #5f6368; font-size: 11px; line-height: 1.4;">
+                    <strong>Enter your ngrok URL:</strong> The base URL of your proxy server (e.g., https://your-id.ngrok-free.app).<br>
+                    <strong>This is required</strong> for all API calls to work. Make sure your ngrok tunnel is running on port 8787.
+                </small>
+            </div>
             <div id="webhook-url-container" style="margin-bottom: 10px; padding: 10px; background: #f0f4f8; border-radius: 8px; border-left: 3px solid #9c27b0;">
                 <label for="webhook-url-input" style="display: block; margin-bottom: 5px; font-size: 13px; color: #202124; font-weight: 500;">
                     🎙️ Attendee Webhook URL (Optional - for real-time updates):
                 </label>
                 <input type="text" id="webhook-url-input" 
-                       placeholder="https://56aff9eb108d.ngrok-free.app/api/webhooks/attendee" 
+                       placeholder="https://16fbb9fb182a.ngrok-free.app/api/webhooks/attendee" 
                        style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; margin-bottom: 5px;">
                 <small style="display: block; color: #5f6368; font-size: 11px; line-height: 1.4;">
                     <strong>For local development:</strong> Use ngrok to expose your proxy server (port 8787).<br>

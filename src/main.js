@@ -248,8 +248,12 @@ function initializeAttendeeIntegration() {
         } else {
           // For GitHub Pages, check localStorage first, then use ngrok URL
           // User can set: localStorage.setItem('MEET_PROXY_URL', 'https://your-ngrok-url.ngrok.io')
-          proxyUrl = localStorage.getItem('MEET_PROXY_URL') || 'https://56aff9eb108d.ngrok-free.app';
-          console.log('[Attendee] Using proxy URL for production:', proxyUrl);
+          proxyUrl = localStorage.getItem('MEET_PROXY_URL') || null;
+          if (proxyUrl) {
+            console.log('[Attendee] Using proxy URL for production:', proxyUrl);
+          } else {
+            console.warn('[Attendee] ⚠️ No proxy URL configured. Please enter your ngrok URL in the "Proxy Server URL" field.');
+          }
         }
       } else {
         proxyUrl = process.env.MEET_PROXY_URL || 'http://localhost:8787';
@@ -447,6 +451,16 @@ export async function setUpAddon() {
     
     if (stopAttendeeBtn) {
       stopAttendeeBtn.addEventListener('click', stopAttendeeTranscript);
+    }
+    
+    // Pre-fill proxy URL from localStorage if available
+    const proxyUrlInput = document.getElementById('proxy-url-input');
+    if (proxyUrlInput && typeof window !== 'undefined') {
+      const savedProxyUrl = localStorage.getItem('MEET_PROXY_URL');
+      if (savedProxyUrl) {
+        proxyUrlInput.value = savedProxyUrl;
+        console.log('[UI] Pre-filled proxy URL from localStorage:', savedProxyUrl);
+      }
     }
 
     // Wire AI send button
@@ -1458,6 +1472,56 @@ async function startAttendeeTranscript() {
       status.textContent = '🔄 Creating Attendee bot and joining meeting...';
     }
     
+    // Get proxy server URL from input (REQUIRED for API calls)
+    const proxyUrlInput = document.getElementById('proxy-url-input');
+    let proxyServerUrl = null;
+    
+    if (proxyUrlInput && proxyUrlInput.value.trim()) {
+      proxyServerUrl = proxyUrlInput.value.trim();
+      // Remove trailing slash if present
+      proxyServerUrl = proxyServerUrl.replace(/\/$/, '');
+      // Update the attendee integration's proxy server URL
+      if (attendeeIntegration) {
+        attendeeIntegration.proxyServerUrl = proxyServerUrl;
+        console.log('✅ Using proxy server URL from input:', proxyServerUrl);
+        
+        // Save to localStorage for future use
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('MEET_PROXY_URL', proxyServerUrl);
+        }
+      }
+    } else {
+      // Try to extract from webhook URL if proxy URL not provided
+      const webhookUrlInput = document.getElementById('webhook-url-input');
+      if (webhookUrlInput && webhookUrlInput.value.trim()) {
+        try {
+          const webhookUrl = webhookUrlInput.value.trim();
+          const url = new URL(webhookUrl);
+          proxyServerUrl = `${url.protocol}//${url.host}`;
+          if (attendeeIntegration) {
+            attendeeIntegration.proxyServerUrl = proxyServerUrl;
+            console.log('✅ Extracted proxy server URL from webhook URL:', proxyServerUrl);
+            localStorage.setItem('MEET_PROXY_URL', proxyServerUrl);
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not extract proxy URL from webhook URL');
+        }
+      }
+      
+      // Fallback to localStorage
+      if (!proxyServerUrl && typeof window !== 'undefined') {
+        proxyServerUrl = localStorage.getItem('MEET_PROXY_URL');
+        if (proxyServerUrl && attendeeIntegration) {
+          attendeeIntegration.proxyServerUrl = proxyServerUrl;
+          console.log('✅ Using proxy server URL from localStorage:', proxyServerUrl);
+        }
+      }
+    }
+    
+    if (!proxyServerUrl || !attendeeIntegration?.proxyServerUrl) {
+      throw new Error('Proxy server URL is required. Please enter your ngrok URL in the "Proxy Server URL" field.');
+    }
+    
     // Get webhook URL from input if provided
     const webhookUrlInput = document.getElementById('webhook-url-input');
     if (webhookUrlInput && webhookUrlInput.value.trim()) {
@@ -1468,6 +1532,11 @@ async function startAttendeeTranscript() {
       } else {
         console.warn('⚠️ Webhook URL must start with https://');
       }
+    } else if (proxyServerUrl && proxyServerUrl.startsWith('https://')) {
+      // Auto-generate webhook URL from proxy URL if not provided
+      const autoWebhookUrl = `${proxyServerUrl}/api/webhooks/attendee`;
+      attendeeIntegration.setWebhookUrl(autoWebhookUrl);
+      console.log('✅ Auto-generated webhook URL from proxy URL:', autoWebhookUrl);
     }
     
     // Get meeting URL - first check manual input, then try auto-detection
