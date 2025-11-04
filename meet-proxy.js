@@ -7,6 +7,8 @@ import crypto from 'crypto';
 
 const app = express();
 const PORT = process.env.PORT || 8787;
+
+// Build allowed origins list
 const ALLOWED_ORIGINS = [
   'http://localhost:8081',
   'http://127.0.0.1:8081',
@@ -15,6 +17,18 @@ const ALLOWED_ORIGINS = [
   // Allow GitHub Pages origin for production sidepanel hosting
   'https://sudugutejasvi.github.io',
 ];
+
+// Add ngrok URL from environment variable if provided
+if (process.env.NGROK_URL) {
+  ALLOWED_ORIGINS.push(process.env.NGROK_URL);
+  console.log('[Proxy] Added ngrok URL to CORS origins:', process.env.NGROK_URL);
+}
+
+// Also allow any ngrok-free.app subdomain (common ngrok pattern)
+// This allows dynamic ngrok URLs without needing to set env var
+ALLOWED_ORIGINS.push(/^https:\/\/.*\.ngrok-free\.app$/);
+ALLOWED_ORIGINS.push(/^https:\/\/.*\.ngrok\.io$/);
+ALLOWED_ORIGINS.push(/^https:\/\/.*\.ngrok\.app$/);
 
 // Webhook secret from environment variable (get from Attendee dashboard)
 const ATTENDEE_WEBHOOK_SECRET = process.env.ATTENDEE_WEBHOOK_SECRET || 'w6qpnfZZDIyPO2zqGwC4wuAJlzaJUBELncyjfu/RauI=';
@@ -59,20 +73,59 @@ function verifyWebhookSignature(payload, signature, secret) {
 }
 
 // Log basic server start info and CORS config
-console.log('[Proxy] CORS allowed origins:', ALLOWED_ORIGINS);
+console.log('[Proxy] CORS allowed origins:', ALLOWED_ORIGINS.filter(o => typeof o === 'string'));
 
-app.use(cors({
-  origin: ALLOWED_ORIGINS,
-  methods: ['GET', 'POST', 'OPTIONS'],
+// Custom CORS handler to support regex patterns
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Check if origin matches any allowed origin (string or regex)
+    const isAllowed = ALLOWED_ORIGINS.some(allowed => {
+      if (typeof allowed === 'string') {
+        return origin === allowed;
+      } else if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn('[Proxy] CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
   allowedHeaders: [
     'Content-Type',
     'X-Access-Token', 'x-access-token',
     'X-Project-Number', 'x-project-number',
     'x-claude-key', 'X-CLAUDE-KEY',
     'x-attendee-api-key', 'X-ATTENDEE-API-KEY',
-    'Authorization'
+    'Authorization',
+    'X-Webhook-Signature',
+    'ngrok-skip-browser-warning' // Allow ngrok browser warning bypass header
   ],
-}));
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+
+// Handle ngrok browser warning bypass
+app.use((req, res, next) => {
+  // If ngrok-skip-browser-warning header is present, it means ngrok is handling the request
+  // This is normal for ngrok free tier
+  if (req.headers['ngrok-skip-browser-warning']) {
+    // Continue normally
+  }
+  next();
+});
 
 // Ensure OPTIONS preflight responses include CORS headers
 // NOTE: cors() middleware above responds to preflight automatically; no explicit app.options route
