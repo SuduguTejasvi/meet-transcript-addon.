@@ -20,6 +20,7 @@ export class AttendeeIntegration {
     this.webhookUrl = null; // Webhook URL for bot creation
     this.webhookPollInterval = null; // Polling interval for webhook transcripts
     this.lastWebhookTimestamp = 0; // Last timestamp we fetched from webhook endpoint
+    this.webhookRetryAttempted = false; // Track if we've tried retrying without webhooks
     
     // Event handlers
     this.onTranscriptUpdate = null;
@@ -46,8 +47,8 @@ export class AttendeeIntegration {
       location: typeof window !== 'undefined' ? window.location.href : 'N/A'
     });
     
-    // Polling interval (in milliseconds) - poll every 2 seconds for real-time updates
-    this.pollIntervalMs = 2000;
+    // Polling interval (in milliseconds) - poll every 1.5 seconds for more real-time updates
+    this.pollIntervalMs = 1500;
     // Webhook polling interval (faster since webhooks are more real-time)
     this.webhookPollIntervalMs = 500;
   }
@@ -488,14 +489,26 @@ export class AttendeeIntegration {
       }
 
       if (effectiveWebhookUrl) {
-        requestBody.webhooks = [
-          {
-            url: effectiveWebhookUrl,
-            triggers: ['transcript.update', 'bot.state_change']
+        // Validate webhook URL format before adding
+        try {
+          const webhookUrlObj = new URL(effectiveWebhookUrl);
+          if (webhookUrlObj.protocol !== 'https:') {
+            console.warn('[Attendee] ⚠️ Webhook URL must be HTTPS, skipping webhooks');
+            effectiveWebhookUrl = null;
+          } else {
+            requestBody.webhooks = [
+              {
+                url: effectiveWebhookUrl,
+                triggers: ['transcript.update', 'bot.state_change']
+              }
+            ];
+            console.log('[Attendee] Using webhooks for real-time updates:', effectiveWebhookUrl);
+            this.setWebhookUrl(effectiveWebhookUrl);
           }
-        ];
-        console.log('Using webhooks for real-time updates:', effectiveWebhookUrl);
-        this.setWebhookUrl(effectiveWebhookUrl);
+        } catch (e) {
+          console.warn('[Attendee] ⚠️ Invalid webhook URL format, skipping webhooks:', e.message);
+          effectiveWebhookUrl = null;
+        }
       }
 
       // Use proxy server to avoid CORS issues in browser
@@ -533,7 +546,33 @@ export class AttendeeIntegration {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to create bot: ${response.status} ${response.statusText}. ${errorData.message || errorData.detail || ''}`);
+        const errorMessage = errorData.detail || errorData.message || errorData.error || '';
+        const errorInfo = errorData.errors ? JSON.stringify(errorData.errors) : '';
+        
+        console.error('[Attendee] ❌ Bot creation failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+          requestBody: requestBody
+        });
+        
+        // If webhooks are causing the issue, try without them
+        if (response.status === 400 && requestBody.webhooks && !this.webhookRetryAttempted) {
+          console.warn('[Attendee] ⚠️ 400 error with webhooks, retrying without webhooks...');
+          console.warn('[Attendee] This might be due to ngrok free tier restrictions or webhook URL validation');
+          this.webhookRetryAttempted = true;
+          // Temporarily disable webhooks and retry
+          const originalWebhookUrl = this.webhookUrl;
+          this.webhookUrl = null;
+          this.useWebhooks = false;
+          // Retry without webhooks
+          return this.createBot(meetingUrl).finally(() => {
+            // Restore webhook URL for future use (but won't be used in this session)
+            this.webhookUrl = originalWebhookUrl;
+          });
+        }
+        
+        throw new Error(`Failed to create bot: ${response.status} ${response.statusText}. ${errorMessage} ${errorInfo}`);
       }
 
       const botData = await response.json();
@@ -717,14 +756,16 @@ export class AttendeeIntegration {
         }
       }
 
+      // Prioritize API polling since it's more reliable
+      // Webhooks can be unreliable due to signature verification issues
+      // Use API polling as primary method
+      console.log('Starting API-based transcription polling (primary method)...');
+      this.startPolling();
+      
+      // Optionally also start webhook polling if configured (as backup)
       if (this.useWebhooks && effectiveWebhookUrl) {
-        console.log('Starting webhook-based transcription polling...');
-        // Poll webhook endpoint on proxy server
+        console.log('Also starting webhook-based transcription polling (backup)...');
         this.startWebhookPolling();
-      } else {
-        console.log('Starting API-based transcription polling...');
-        // Poll Attendee API directly
-        this.startPolling();
       }
 
       if (this.onBotStatusChange) {
@@ -879,8 +920,8 @@ export class AttendeeIntegration {
       }
 
       // Track last timestamp to only get new transcripts (incremental fetching)
-      const lastTimestamp = this.lastTranscriptTimestamp || 0;
-      const transcriptData = await this.getTranscript(lastTimestamp > 0 ? lastTimestamp : null);
+      // Note: Attendee.ai API may not support 'since' parameter, so we'll fetch all and deduplicate
+      const transcriptData = await this.getTranscript(null);
       
       // Log raw response for first few polls to debug API format
       if (this.pollCount === undefined) this.pollCount = 0;
@@ -987,12 +1028,17 @@ export class AttendeeIntegration {
     }
 
     // Use a more robust method to track processed entries
-    // Use timestamp_ms as unique identifier instead of array index
-    const processedTimestamps = new Set(
-      this.transcriptEntries.map(e => e.timestamp || e.timestamp_ms || `${e.speakerName}-${e.transcription}`)
+    // Create unique ID from timestamp_ms + speaker_name + transcript text (first 50 chars)
+    const processedIds = new Set(
+      this.transcriptEntries.map(e => {
+        const ts = e.timestamp || e.timestamp_ms || 0;
+        const speaker = e.speakerName || 'Unknown';
+        const text = (e.transcription || '').substring(0, 50);
+        return `${ts}-${speaker}-${text}`;
+      })
     );
 
-    // Find new entries by comparing timestamps or content
+    // Find new entries by comparing composite IDs
     const newEntries = entries.filter(entry => {
       const timestamp = entry.timestamp_ms || entry.timestamp || 0;
       const speakerName = entry.speaker_name || entry.speakerName || 'Unknown';
@@ -1007,8 +1053,9 @@ export class AttendeeIntegration {
         transcriptText = entry.text || entry.transcript || '';
       }
       
-      const uniqueId = timestamp || `${speakerName}-${transcriptText}`;
-      return !processedTimestamps.has(uniqueId);
+      // Create composite ID: timestamp + speaker + first 50 chars of text
+      const uniqueId = `${timestamp}-${speakerName}-${transcriptText.substring(0, 50)}`;
+      return !processedIds.has(uniqueId);
     });
 
     if (newEntries.length === 0) {
@@ -1047,9 +1094,12 @@ export class AttendeeIntegration {
           isFinal: entry.is_final !== false // Default to true for transcript entries
         };
 
-        // Store processed entry
+        // Store processed entry with composite ID for deduplication
+        const entryId = `${formattedEntry.timestamp}-${formattedEntry.speakerName}-${formattedEntry.transcription.substring(0, 50)}`;
         this.transcriptEntries.push({
-          timestamp: formattedEntry.timestamp || `${formattedEntry.speakerName}-${formattedEntry.transcription}`,
+          id: entryId,
+          timestamp: formattedEntry.timestamp,
+          timestamp_ms: formattedEntry.timestamp,
           speakerName: formattedEntry.speakerName,
           transcription: formattedEntry.transcription
         });
