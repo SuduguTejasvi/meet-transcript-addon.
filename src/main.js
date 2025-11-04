@@ -225,9 +225,9 @@ function initializeAttendeeIntegration() {
     // Get webhook URL from credentials or environment
     // For local development with ngrok: https://your-ngrok-url.ngrok.io/api/webhooks/attendee
     // For production: https://your-domain.com/api/webhooks/attendee
-    const webhookUrl = credentials?.attendeeWebhookUrl || 
-                      (typeof process !== 'undefined' && process.env?.ATTENDEE_WEBHOOK_URL) ||
-                      null;
+    let webhookUrl = credentials?.attendeeWebhookUrl || 
+                     (typeof process !== 'undefined' && process.env?.ATTENDEE_WEBHOOK_URL) ||
+                     null;
     
     // Create AttendeeIntegration instance
     // Determine proxy URL - use credentials proxyUrl or proxyServerUrl, with fallback
