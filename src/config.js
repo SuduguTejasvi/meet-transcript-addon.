@@ -8,10 +8,16 @@ export const config = {
   CLOUD_PROJECT_NUMBER: '409997382473',
   
   // Deepgram API Key (get this from Deepgram dashboard)
-  DEEPGRAM_API_KEY: '306114cbf5e0f315e34cc259af3d16b9fe000992',
+  // Set via DEEPGRAM_API_KEY environment variable
+  DEEPGRAM_API_KEY: process?.env?.DEEPGRAM_API_KEY || '',
   
   // Attendee.ai API Key (get this from Attendee.dev dashboard)
-  ATTENDEE_API_KEY: process?.env?.ATTENDEE_API_KEY || 'iNTT7LNLA09cjy8uxwoaquRqrhYrmmaM',
+  // Set via ATTENDEE_API_KEY environment variable
+  ATTENDEE_API_KEY: process?.env?.ATTENDEE_API_KEY || '',
+  
+  // Anthropic/Claude API Key (get this from Anthropic dashboard)
+  // Set via ANTHROPIC_API_KEY or CLAUDE_API_KEY environment variable
+  ANTHROPIC_API_KEY: process?.env?.ANTHROPIC_API_KEY || process?.env?.CLAUDE_API_KEY || '',
   
   // URLs for your add-on pages
   MAIN_STAGE_URL: window.location.origin + '/mainstage.html',

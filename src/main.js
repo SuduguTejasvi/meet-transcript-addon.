@@ -10,6 +10,7 @@ let credentials = null;
 let cloudProjectNumber = null;
 let deepgramApiKey = null;
 let attendeeApiKey = null;
+let claudeApiKey = null;
 let mainStageUrl = null;
 
 let sidePanelClient;
@@ -38,6 +39,7 @@ async function initializeSecureCredentials() {
     cloudProjectNumber = credentials.cloudProjectNumber;
     deepgramApiKey = credentials.deepgramApiKey;
     attendeeApiKey = credentials.attendeeApiKey;
+    claudeApiKey = credentials.claudeApiKey;
     mainStageUrl = credentials.mainStageUrl;
     
     // Log security status (without exposing sensitive data)
@@ -1499,13 +1501,17 @@ async function sendQuestionToAI() {
     const transcriptText = transcriptBuffer.join('\n');
     answerEl.style.display = 'block';
     answerEl.textContent = 'Asking AI...';
+    if (!claudeApiKey) {
+      answerEl.textContent = 'Claude API key not configured. Please set ANTHROPIC_API_KEY environment variable.';
+      return;
+    }
+    
     const prompt = `You are an assistant. Answer the question using ONLY the following meeting transcript. If unsure, say you are unsure.\n\nTranscript:\n${transcriptText}\n\nQuestion: ${userQuestion}`;
     const res = await fetch('http://localhost:8787/api/askClaude', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Pass user-provided key securely from UI/session in real apps; provided here per request
-        'x-claude-key': 'ANTHROPIC_API_KEY_PLACEHOLDER'
+        'x-claude-key': claudeApiKey
       },
       body: JSON.stringify({ prompt })
     });

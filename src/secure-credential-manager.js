@@ -64,12 +64,13 @@ export class SecureCredentialManager {
         // Browser environment - credentials should be provided via secure means
         console.warn('⚠️ Running in browser environment - credentials should be provided securely');
         
-        // For Google Meet Add-ons, we only need the cloud project number, Deepgram API key, and Attendee.ai API key
+        // For Google Meet Add-ons, we only need the cloud project number, Deepgram API key, Attendee.ai API key, and Claude API key
         // These can be provided via environment variables or configuration
         this.credentials = {
           cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER || '409997382473',
-          deepgramApiKey: process.env.DEEPGRAM_API_KEY || '306114cbf5e0f315e34cc259af3d16b9fe000992',
-          attendeeApiKey: process.env.ATTENDEE_API_KEY || 'iNTT7LNLA09cjy8uxwoaquRqrhYrmmaM',
+          deepgramApiKey: process.env.DEEPGRAM_API_KEY || '',
+          attendeeApiKey: process.env.ATTENDEE_API_KEY || '',
+          claudeApiKey: process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '',
           oauthClientId: process.env.OAUTH_CLIENT_ID || '409997382473-c9kq9iijvgibd139ngrg8acitiip22vl.apps.googleusercontent.com',
           proxyUrl: process.env.MEET_PROXY_URL || 'http://localhost:8787', // Default to meet-proxy.js server
           mainStageUrl: process.env.MAIN_STAGE_URL || window.location.origin + '/mainstage.html',
@@ -91,6 +92,7 @@ export class SecureCredentialManager {
         cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER,
         deepgramApiKey: process.env.DEEPGRAM_API_KEY,
         attendeeApiKey: process.env.ATTENDEE_API_KEY || '',
+        claudeApiKey: process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '',
         mainStageUrl: process.env.MAIN_STAGE_URL,
         sidePanelUrl: process.env.SIDE_PANEL_URL,
         nodeEnv: process.env.NODE_ENV || 'development',
@@ -193,6 +195,7 @@ export class SecureCredentialManager {
         cloudProjectNumber: this.credentials.cloudProjectNumber,
         deepgramApiKey: this.credentials.deepgramApiKey,
         attendeeApiKey: this.credentials.attendeeApiKey,
+        claudeApiKey: this.credentials.claudeApiKey,
         oauthClientId: this.credentials.oauthClientId,
         proxyUrl: this.credentials.proxyUrl,
         mainStageUrl: this.credentials.mainStageUrl,
@@ -213,6 +216,8 @@ export class SecureCredentialManager {
       clientId: this.credentials.clientId,
       cloudProjectNumber: this.credentials.cloudProjectNumber,
       deepgramApiKey: this.credentials.deepgramApiKey,
+      attendeeApiKey: this.credentials.attendeeApiKey,
+      claudeApiKey: this.credentials.claudeApiKey,
       mainStageUrl: this.credentials.mainStageUrl,
       sidePanelUrl: this.credentials.sidePanelUrl,
       nodeEnv: this.credentials.nodeEnv,
