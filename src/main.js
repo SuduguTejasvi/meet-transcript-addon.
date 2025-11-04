@@ -225,7 +225,7 @@ function initializeAttendeeIntegration() {
     // Get webhook URL from credentials or environment
     // For local development with ngrok: https://your-ngrok-url.ngrok.io/api/webhooks/attendee
     // For production: https://your-domain.com/api/webhooks/attendee
-    const webhookUrl = credentials?.attendeeWebhookUrl || 
+    let webhookUrl = credentials?.attendeeWebhookUrl || 
                       (typeof process !== 'undefined' && process.env?.ATTENDEE_WEBHOOK_URL) ||
                       null;
     
@@ -248,7 +248,7 @@ function initializeAttendeeIntegration() {
         } else {
           // For GitHub Pages, check localStorage first, then use ngrok URL
           // User can set: localStorage.setItem('MEET_PROXY_URL', 'https://your-ngrok-url.ngrok.io')
-          proxyUrl = localStorage.getItem('MEET_PROXY_URL') || 'https://594828b04048.ngrok-free.app';
+          proxyUrl = localStorage.getItem('MEET_PROXY_URL') || 'https://56aff9eb108d.ngrok-free.app';
           console.log('[Attendee] Using proxy URL for production:', proxyUrl);
         }
       } else {
