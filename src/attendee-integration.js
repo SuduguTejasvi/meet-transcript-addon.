@@ -472,13 +472,20 @@ export class AttendeeIntegration {
 
       // Add webhooks if configured (check both webhookUrl and try to construct from proxy)
       let effectiveWebhookUrl = this.webhookUrl;
+      
+      // Also check credentials for webhook URL
+      if (!effectiveWebhookUrl && this.credentials?.attendeeWebhookUrl) {
+        effectiveWebhookUrl = this.credentials.attendeeWebhookUrl;
+        console.log('[Attendee] Using webhook URL from credentials:', effectiveWebhookUrl);
+      }
+      
       if (!effectiveWebhookUrl && this.useProxy && this.proxyServerUrl) {
         try {
           const proxyUrl = new URL(this.proxyServerUrl);
           // For localhost, we can't use webhooks (they need HTTPS), but log it
           if (proxyUrl.protocol === 'https:') {
             effectiveWebhookUrl = `${this.proxyServerUrl}/api/webhooks/attendee`;
-            console.log('[Attendee] Will use proxy webhook URL:', effectiveWebhookUrl);
+            console.log('[Attendee] ✅ Auto-configuring webhook URL from HTTPS proxy:', effectiveWebhookUrl);
           } else {
             console.log('[Attendee] Proxy is HTTP (localhost), webhooks require HTTPS. Using API polling instead.');
           }
@@ -494,8 +501,12 @@ export class AttendeeIntegration {
             triggers: ['transcript.update', 'bot.state_change']
           }
         ];
-        console.log('Using webhooks for real-time updates:', effectiveWebhookUrl);
+        console.log('[Attendee] ✅ Webhooks configured for live transcripts:', effectiveWebhookUrl);
         this.setWebhookUrl(effectiveWebhookUrl);
+        this.useWebhooks = true; // CRITICAL: Enable webhooks flag
+      } else {
+        console.warn('[Attendee] ⚠️ No webhook URL configured. Will use API polling (slower, delayed updates).');
+        console.warn('[Attendee]    Transcripts will only appear after participant pauses.');
       }
 
       // Use proxy server to avoid CORS issues in browser
@@ -700,6 +711,14 @@ export class AttendeeIntegration {
       // Otherwise, construct webhook URL from proxy server if available
       let effectiveWebhookUrl = this.webhookUrl;
       
+      // Also check credentials for webhook URL
+      if (!effectiveWebhookUrl && this.credentials?.attendeeWebhookUrl) {
+        effectiveWebhookUrl = this.credentials.attendeeWebhookUrl;
+        this.setWebhookUrl(effectiveWebhookUrl);
+        this.useWebhooks = true;
+        console.log('[Attendee] Using webhook URL from credentials:', effectiveWebhookUrl);
+      }
+      
       if (!effectiveWebhookUrl && this.useProxy && this.proxyServerUrl) {
         // Try to construct webhook URL from proxy server
         // For local development, we'd need ngrok or similar
@@ -709,20 +728,23 @@ export class AttendeeIntegration {
           // Only use proxy webhook if it's HTTPS (production)
           if (proxyUrl.protocol === 'https:') {
             effectiveWebhookUrl = `${this.proxyServerUrl}/api/webhooks/attendee`;
-            console.log('[Attendee] Using proxy server webhook URL:', effectiveWebhookUrl);
+            console.log('[Attendee] ✅ Using proxy server webhook URL for live transcripts:', effectiveWebhookUrl);
             this.setWebhookUrl(effectiveWebhookUrl);
+            this.useWebhooks = true; // CRITICAL: Enable webhooks
           }
         } catch (e) {
           // Invalid URL, skip
         }
       }
 
+      // Use webhooks if configured, otherwise fall back to API polling
       if (this.useWebhooks && effectiveWebhookUrl) {
-        console.log('Starting webhook-based transcription polling...');
+        console.log('[Attendee] 🎙️ Starting webhook-based transcription (real-time updates)...');
         // Poll webhook endpoint on proxy server
         this.startWebhookPolling();
       } else {
-        console.log('Starting API-based transcription polling...');
+        console.log('[Attendee] ⚠️ Starting API-based transcription polling (slower, delayed updates)...');
+        console.log('[Attendee]    Note: API polling only returns transcripts after participant pauses.');
         // Poll Attendee API directly
         this.startPolling();
       }

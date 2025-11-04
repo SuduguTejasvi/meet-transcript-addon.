@@ -240,32 +240,39 @@ function initializeAttendeeIntegration() {
     
     if (!proxyUrl) {
       // Default to localhost for local development
-      // For production (GitHub Pages), you MUST set this to a public URL
+      // For production (GitHub Pages), use ngrok URL or check localStorage
       if (typeof window !== 'undefined') {
         const hostname = window.location.hostname;
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
           proxyUrl = 'http://localhost:8787';
         } else {
-          // For GitHub Pages or other production, you need a public proxy URL
-          // This should be set via environment variable or credentials
-          console.warn('[Attendee] ⚠️ Running from production domain but no proxy URL configured. Requests will fail.');
-          console.warn('[Attendee] Set MEET_PROXY_URL environment variable or configure proxyUrl in credentials.');
-          proxyUrl = 'http://localhost:8787'; // Will fail in production - user must configure
+          // For GitHub Pages, check localStorage first, then use ngrok URL
+          // User can set: localStorage.setItem('MEET_PROXY_URL', 'https://your-ngrok-url.ngrok.io')
+          proxyUrl = localStorage.getItem('MEET_PROXY_URL') || 'https://594828b04048.ngrok-free.app';
+          console.log('[Attendee] Using proxy URL for production:', proxyUrl);
         }
       } else {
-        proxyUrl = 'http://localhost:8787';
+        proxyUrl = process.env.MEET_PROXY_URL || 'http://localhost:8787';
       }
     }
     
     console.log('[Attendee] Initializing with proxy URL:', proxyUrl);
     console.log('[Attendee] Current location:', typeof window !== 'undefined' ? window.location.href : 'N/A');
     
+    // Auto-detect HTTPS proxy and configure webhook URL for live transcripts
+    // If proxy is HTTPS and no webhook URL is explicitly set, auto-configure it
+    if (!webhookUrl && proxyUrl && proxyUrl.startsWith('https://')) {
+      webhookUrl = `${proxyUrl}/api/webhooks/attendee`;
+      console.log('[Attendee] ✅ Auto-detected HTTPS proxy, configuring webhooks for live transcripts:', webhookUrl);
+    }
+    
     attendeeIntegration = new AttendeeIntegration(
       attendeeApiKey,
       {
         ...credentials,
         proxyServerUrl: proxyUrl,
-        proxyUrl: proxyUrl // Support both property names
+        proxyUrl: proxyUrl, // Support both property names
+        attendeeWebhookUrl: webhookUrl // Pass webhook URL in credentials for bot creation
       },
       {
         sidePanelClient: sidePanelClient,
@@ -276,7 +283,8 @@ function initializeAttendeeIntegration() {
     // Set webhook URL if configured (for real-time updates)
     if (webhookUrl) {
       attendeeIntegration.setWebhookUrl(webhookUrl);
-      console.log('✅ Webhook URL configured for real-time transcript updates');
+      attendeeIntegration.useWebhooks = true; // Enable webhooks flag
+      console.log('✅ Webhook URL configured for real-time transcript updates:', webhookUrl);
     } else {
       console.log('ℹ️ No webhook URL configured, will use API polling (slower but works without webhook setup)');
     }
