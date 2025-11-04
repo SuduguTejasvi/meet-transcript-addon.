@@ -768,16 +768,15 @@ export class AttendeeIntegration {
         }
       }
 
-      // Prioritize API polling since it's more reliable
-      // Webhooks can be unreliable due to signature verification issues
-      // Use API polling as primary method
-      console.log('Starting API-based transcription polling (primary method)...');
-      this.startPolling();
-      
-      // Optionally also start webhook polling if configured (as backup)
+      // Use webhooks if available (faster and more real-time)
+      // Otherwise fall back to API polling
       if (this.useWebhooks && effectiveWebhookUrl) {
-        console.log('Also starting webhook-based transcription polling (backup)...');
+        console.log('Starting webhook-based transcription polling (primary method)...');
         this.startWebhookPolling();
+        // Don't start API polling when webhooks are active to avoid duplicates
+      } else {
+        console.log('Starting API-based transcription polling (no webhooks configured)...');
+        this.startPolling();
       }
 
       if (this.onBotStatusChange) {
@@ -871,34 +870,38 @@ export class AttendeeIntegration {
       const newTranscripts = data.transcripts || [];
 
       if (newTranscripts.length > 0) {
-        // Process new transcript entries
-        newTranscripts.forEach(entry => {
-          if (entry.type === 'bot_state_change') {
-            // Handle bot state change
-            if (this.onBotStatusChange) {
-              this.onBotStatusChange({
-                status: entry.newState,
-                oldStatus: entry.oldState,
-                eventType: entry.eventType,
-                botId: entry.botId
-              });
-            }
-          } else if (entry.transcription) {
-            // Handle transcript update
-            if (this.onTranscriptUpdate) {
-              const formattedEntry = {
-                speakerName: entry.speakerName || 'Unknown',
-                speakerUuid: entry.speakerUuid || null,
-                timestamp: entry.timestamp || 0,
-                duration: entry.duration || 0,
-                transcription: entry.transcription,
-                words: entry.words || null,
-                isFinal: true // Webhook transcripts are always final
-              };
-              this.onTranscriptUpdate(formattedEntry);
-            }
+        // Process bot state changes separately
+        const stateChanges = newTranscripts.filter(e => e.type === 'bot_state_change');
+        const transcriptEntries = newTranscripts.filter(e => e.transcription && e.type !== 'bot_state_change');
+        
+        // Handle bot state changes
+        stateChanges.forEach(entry => {
+          if (this.onBotStatusChange) {
+            this.onBotStatusChange({
+              status: entry.newState,
+              oldStatus: entry.oldState,
+              eventType: entry.eventType,
+              botId: entry.botId
+            });
           }
         });
+        
+        // Convert webhook transcript format to API format for unified processing
+        const apiFormatEntries = transcriptEntries.map(entry => ({
+          speaker_name: entry.speakerName,
+          speaker_uuid: entry.speakerUuid,
+          timestamp_ms: entry.timestamp,
+          duration_ms: entry.duration,
+          transcription: typeof entry.transcription === 'string' 
+            ? entry.transcription 
+            : (entry.transcription?.transcript || entry.transcription?.text || ''),
+          is_final: true
+        }));
+        
+        // Use the same deduplication logic as API polling
+        if (apiFormatEntries.length > 0) {
+          this.processTranscriptEntries(apiFormatEntries);
+        }
 
         // Update last timestamp
         if (data.latestTimestamp > this.lastWebhookTimestamp) {
@@ -1046,13 +1049,15 @@ export class AttendeeIntegration {
     }
 
     // Use a more robust method to track processed entries
-    // Create unique ID from timestamp_ms + speaker_name + transcript text (first 50 chars)
+    // Create unique ID from timestamp_ms + speaker_name + transcript text (first 100 chars + hash of full text)
     const processedIds = new Set(
       this.transcriptEntries.map(e => {
         const ts = e.timestamp || e.timestamp_ms || 0;
         const speaker = e.speakerName || 'Unknown';
-        const text = (e.transcription || '').substring(0, 50);
-        return `${ts}-${speaker}-${text}`;
+        const text = (e.transcription || '').trim();
+        // Use first 100 chars + simple hash of full text for uniqueness
+        const textHash = text.length > 0 ? text.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0) : 0;
+        return `${ts}-${speaker}-${text.substring(0, 100)}-${textHash}`;
       })
     );
 
@@ -1071,8 +1076,14 @@ export class AttendeeIntegration {
         transcriptText = entry.text || entry.transcript || '';
       }
       
-      // Create composite ID: timestamp + speaker + first 50 chars of text
-      const uniqueId = `${timestamp}-${speakerName}-${transcriptText.substring(0, 50)}`;
+      transcriptText = transcriptText.trim();
+      if (!transcriptText) {
+        return false; // Skip empty transcripts
+      }
+      
+      // Create composite ID: timestamp + speaker + first 100 chars + hash of full text
+      const textHash = transcriptText.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
+      const uniqueId = `${timestamp}-${speakerName}-${transcriptText.substring(0, 100)}-${textHash}`;
       return !processedIds.has(uniqueId);
     });
 
@@ -1113,7 +1124,8 @@ export class AttendeeIntegration {
         };
 
         // Store processed entry with composite ID for deduplication
-        const entryId = `${formattedEntry.timestamp}-${formattedEntry.speakerName}-${formattedEntry.transcription.substring(0, 50)}`;
+        const textHash = formattedEntry.transcription.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
+        const entryId = `${formattedEntry.timestamp}-${formattedEntry.speakerName}-${formattedEntry.transcription.substring(0, 100)}-${textHash}`;
         this.transcriptEntries.push({
           id: entryId,
           timestamp: formattedEntry.timestamp,
