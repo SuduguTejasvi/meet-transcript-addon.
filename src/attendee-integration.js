@@ -918,8 +918,9 @@ export class AttendeeIntegration {
           // For first 10 polls, also check bot info to see if there are events
           try {
             const botInfo = await this.getBotInfo();
+            // getBotInfo now processes events automatically, so we just log
             if (botInfo.events && botInfo.events.length > 0) {
-              console.log(`[Attendee] Bot has ${botInfo.events.length} events but transcript endpoint returned empty`);
+              console.log(`[Attendee] Bot has ${botInfo.events.length} events - checking for transcripts in events...`);
             }
           } catch (e) {
             // Ignore errors checking bot info during polling
@@ -1128,15 +1129,35 @@ export class AttendeeIntegration {
 
       const botInfo = await response.json();
       
-      // Log bot events if they exist (transcripts might be in events)
+      // Log ALL events to understand their structure (not just transcript ones)
       if (botInfo.events && Array.isArray(botInfo.events) && botInfo.events.length > 0) {
-        const transcriptEvents = botInfo.events.filter(e => 
-          e.type === 'transcript.update' || e.trigger === 'transcript.update' || 
-          e.event_type === 'transcript.update' || e.data?.transcription
-        );
+        console.log(`[Attendee] Bot has ${botInfo.events.length} events. Inspecting all events...`);
+        
+        // Log first few events to see their structure
+        botInfo.events.slice(0, 3).forEach((event, index) => {
+          console.log(`[Attendee] Event #${index + 1}:`, JSON.stringify(event, null, 2));
+        });
+        
+        // Check for transcript events
+        const transcriptEvents = botInfo.events.filter(e => {
+          const eventStr = JSON.stringify(e).toLowerCase();
+          return eventStr.includes('transcript') || 
+                 eventStr.includes('transcription') ||
+                 e.type === 'transcript.update' || 
+                 e.trigger === 'transcript.update' || 
+                 e.event_type === 'transcript.update' || 
+                 e.data?.transcription ||
+                 e.data?.transcript;
+        });
+        
         if (transcriptEvents.length > 0) {
-          console.log(`[Attendee] Found ${transcriptEvents.length} transcript event(s) in bot events`);
-          console.log('[Attendee] Sample event:', JSON.stringify(transcriptEvents[0], null, 2));
+          console.log(`[Attendee] ✅ Found ${transcriptEvents.length} transcript event(s) in bot events!`);
+          console.log('[Attendee] Processing transcript events...');
+          
+          // Process events as transcripts
+          this.processBotEventsAsTranscripts(transcriptEvents);
+        } else {
+          console.log('[Attendee] No transcript events found in bot events');
         }
       }
       
@@ -1145,6 +1166,79 @@ export class AttendeeIntegration {
       console.error('Error getting bot info:', error);
       throw error;
     }
+  }
+
+  /**
+   * Process bot events as transcript entries (fallback when transcript endpoint is empty)
+   */
+  processBotEventsAsTranscripts(events) {
+    if (!events || events.length === 0) return;
+    
+    events.forEach(event => {
+      try {
+        // Extract transcript data from various event structures
+        let transcriptData = null;
+        
+        if (event.data?.transcription) {
+          transcriptData = event.data.transcription;
+        } else if (event.data?.transcript) {
+          transcriptData = event.data.transcript;
+        } else if (event.transcription) {
+          transcriptData = event.transcription;
+        } else if (event.transcript) {
+          transcriptData = event.transcript;
+        } else if (event.data) {
+          // Check if data itself is the transcript
+          transcriptData = event.data;
+        }
+        
+        if (!transcriptData) {
+          return; // Skip if no transcript data found
+        }
+        
+        // Extract transcript text
+        let transcriptText = '';
+        if (typeof transcriptData === 'string') {
+          transcriptText = transcriptData;
+        } else if (transcriptData.transcript) {
+          transcriptText = transcriptData.transcript;
+        } else if (transcriptData.text) {
+          transcriptText = transcriptData.text;
+        }
+        
+        if (!transcriptText || !transcriptText.trim()) {
+          return; // Skip empty transcripts
+        }
+        
+        // Format as transcript entry
+        const formattedEntry = {
+          speakerName: event.data?.speaker_name || event.data?.speakerName || event.speaker_name || 'Unknown',
+          speakerUuid: event.data?.speaker_uuid || event.data?.speakerUuid || event.speaker_uuid || null,
+          timestamp: event.data?.timestamp_ms || event.data?.timestamp || event.timestamp_ms || event.timestamp || Date.now(),
+          duration: event.data?.duration_ms || event.data?.duration || event.duration_ms || event.duration || 0,
+          transcription: transcriptText.trim(),
+          isFinal: true,
+          words: transcriptData.words || event.data?.transcription?.words || null
+        };
+        
+        console.log(`[Attendee] ✅ Extracted transcript from event: ${formattedEntry.speakerName}: "${transcriptText.substring(0, 50)}${transcriptText.length > 50 ? '...' : ''}"`);
+        
+        // Emit transcript update
+        if (this.onTranscriptUpdate) {
+          this.onTranscriptUpdate(formattedEntry);
+        }
+        
+        // Track as processed
+        this.transcriptEntries.push({
+          timestamp: formattedEntry.timestamp || `${formattedEntry.speakerName}-${formattedEntry.transcription}`,
+          speakerName: formattedEntry.speakerName,
+          transcription: formattedEntry.transcription
+        });
+        
+      } catch (error) {
+        console.warn('[Attendee] Error processing event as transcript:', error);
+      }
+    });
   }
 
   /**
