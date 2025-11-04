@@ -15,6 +15,7 @@ export class AttendeeIntegration {
     this.isActive = false;
     this.pollInterval = null;
     this.transcriptEntries = [];
+    this.lastTranscriptTimestamp = 0; // Track last transcript timestamp for incremental fetching
     this.useWebhooks = false; // Whether to use webhooks instead of polling
     this.webhookUrl = null; // Webhook URL for bot creation
     this.webhookPollInterval = null; // Polling interval for webhook transcripts
@@ -558,16 +559,22 @@ export class AttendeeIntegration {
    * Get transcript from the bot
    * GET /bots/{bot_id}/transcript
    */
-  async getTranscript() {
+  async getTranscript(sinceTimestamp = null) {
     try {
       if (!this.botId) {
         throw new Error('Bot ID is required. Create a bot first.');
       }
 
       // Use proxy server to avoid CORS issues in browser
-      const url = this.useProxy
+      let url = this.useProxy
         ? `${this.proxyServerUrl}/api/attendee/bots/${this.botId}/transcript`
         : `${this.baseUrl}/bots/${this.botId}/transcript`;
+      
+      // Add query parameters if provided (for incremental fetching)
+      if (sinceTimestamp) {
+        const separator = url.includes('?') ? '&' : '?';
+        url += `${separator}since=${sinceTimestamp}`;
+      }
       
       const headers = {
         'Content-Type': 'application/json'
@@ -596,6 +603,19 @@ export class AttendeeIntegration {
       }
 
       const transcriptData = await response.json();
+      
+      // Log detailed response structure for debugging (when data is found or first few calls)
+      const shouldLog = (this.pollCount && this.pollCount <= 5) || (Array.isArray(transcriptData) && transcriptData.length > 0);
+      if (shouldLog) {
+        console.log('[Attendee] Transcript API response details:', {
+          isArray: Array.isArray(transcriptData),
+          length: Array.isArray(transcriptData) ? transcriptData.length : 'N/A',
+          type: typeof transcriptData,
+          keys: transcriptData && typeof transcriptData === 'object' && !Array.isArray(transcriptData) ? Object.keys(transcriptData) : [],
+          sample: transcriptData && Array.isArray(transcriptData) && transcriptData.length > 0 ? transcriptData[0] : null
+        });
+      }
+      
       return transcriptData;
     } catch (error) {
       console.error('Error getting transcript:', error);
@@ -624,6 +644,7 @@ export class AttendeeIntegration {
       this.isActive = true;
       this.transcriptEntries = [];
       this.lastWebhookTimestamp = 0;
+      this.lastTranscriptTimestamp = 0; // Reset timestamp tracking
       this.pollCount = 0; // Reset poll count
 
       // Wait for bot to join and transcription to start
@@ -857,7 +878,9 @@ export class AttendeeIntegration {
         return;
       }
 
-      const transcriptData = await this.getTranscript();
+      // Track last timestamp to only get new transcripts (incremental fetching)
+      const lastTimestamp = this.lastTranscriptTimestamp || 0;
+      const transcriptData = await this.getTranscript(lastTimestamp > 0 ? lastTimestamp : null);
       
       // Log raw response for first few polls to debug API format
       if (this.pollCount === undefined) this.pollCount = 0;
@@ -882,6 +905,7 @@ export class AttendeeIntegration {
         // Log response structure if no entries found
         if (this.pollCount <= 5) {
           console.log(`[Attendee] Poll #${this.pollCount}: No entries found. Response keys:`, Object.keys(transcriptData));
+          console.log(`[Attendee] Poll #${this.pollCount}: Full response:`, JSON.stringify(transcriptData, null, 2));
         }
       }
 
@@ -893,9 +917,29 @@ export class AttendeeIntegration {
         }
       }
 
+      // Update last timestamp if we got new entries
+      if (entries.length > 0) {
+        // Find the highest timestamp in the entries
+        const timestamps = entries.map(e => e.timestamp_ms || e.timestamp || 0).filter(ts => ts > 0);
+        if (timestamps.length > 0) {
+          const maxTimestamp = Math.max(...timestamps);
+          if (maxTimestamp > this.lastTranscriptTimestamp) {
+            this.lastTranscriptTimestamp = maxTimestamp;
+            console.log(`[Attendee] Updated last transcript timestamp: ${maxTimestamp}`);
+          }
+        }
+      }
+
       // Process new entries
       if (entries.length > 0) {
         this.processTranscriptEntries(entries);
+      } else if (this.pollCount > 10 && this.pollCount % 10 === 0) {
+        // Log periodically if no transcripts after many polls
+        console.warn(`[Attendee] ⚠️ Still no transcripts after ${this.pollCount} polls. Transcription state: in_progress. This may indicate:`);
+        console.warn('[Attendee]   1. No one is speaking (even if not muted)');
+        console.warn('[Attendee]   2. Audio delay or buffering');
+        console.warn('[Attendee]   3. API endpoint issue - check Attendee.ai dashboard');
+        console.warn('[Attendee]   4. Try speaking clearly into the microphone');
       }
     } catch (error) {
       console.error('[Attendee] Error polling transcript:', error);

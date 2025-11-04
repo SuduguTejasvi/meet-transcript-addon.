@@ -406,14 +406,21 @@ app.get('/api/attendee/bots/:botId/transcript', async (req, res) => {
     }
 
     const { botId } = req.params;
+    const since = req.query.since || null;
     
     // Log transcript requests for debugging
     const requestCount = (global.transcriptRequestCount = (global.transcriptRequestCount || 0) + 1);
     if (requestCount <= 5) {
-      console.log(`[Proxy] Transcript request #${requestCount} for bot: ${botId}`);
+      console.log(`[Proxy] Transcript request #${requestCount} for bot: ${botId}${since ? ` (since=${since})` : ''}`);
     }
     
-    const response = await fetch(`https://app.attendee.dev/api/v1/bots/${botId}/transcript`, {
+    // Build URL with query parameters if provided
+    let url = `https://app.attendee.dev/api/v1/bots/${botId}/transcript`;
+    if (since) {
+      url += `?since=${encodeURIComponent(since)}`;
+    }
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Token ${apiKey}`,
@@ -429,12 +436,16 @@ app.get('/api/attendee/bots/:botId/transcript', async (req, res) => {
         status: response.status,
         hasData: !!data,
         dataType: Array.isArray(data) ? 'array' : typeof data,
-        dataKeys: data && typeof data === 'object' ? Object.keys(data) : [],
-        entryCount: Array.isArray(data) ? data.length : (data?.entries?.length || data?.transcript?.length || data?.results?.length || 0)
+        dataKeys: data && typeof data === 'object' && !Array.isArray(data) ? Object.keys(data) : [],
+        entryCount: Array.isArray(data) ? data.length : (data?.entries?.length || data?.transcript?.length || data?.results?.length || 0),
+        fullResponse: requestCount <= 3 ? JSON.stringify(data, null, 2) : undefined // Full response for first 3 requests
       });
       
       if (response.status === 404) {
         console.log('[Proxy] No transcript yet (404 response) - bot may still be joining');
+      } else if (Array.isArray(data) && data.length === 0) {
+        console.log('[Proxy] ⚠️ Empty array returned - transcription may be in progress but no audio detected yet');
+        console.log('[Proxy]    This is normal if: no one is speaking, audio is muted, or there is a delay');
       }
     }
     
