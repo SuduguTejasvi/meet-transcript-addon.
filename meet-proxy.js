@@ -68,7 +68,9 @@ app.use(cors({
     'Content-Type',
     'X-Access-Token', 'x-access-token',
     'X-Project-Number', 'x-project-number',
-    'x-claude-key', 'X-CLAUDE-KEY'
+    'x-claude-key', 'X-CLAUDE-KEY',
+    'x-attendee-api-key', 'X-ATTENDEE-API-KEY',
+    'Authorization'
   ],
 }));
 
@@ -348,6 +350,82 @@ app.get('/api/docs/transcript', async (req, res) => {
 });
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Proxy endpoints for Attendee.ai API to avoid browser CORS
+// POST /api/attendee/bots - Create a bot
+app.post('/api/attendee/bots', async (req, res) => {
+  try {
+    const apiKey = req.get('x-attendee-api-key') || req.get('authorization')?.replace('Token ', '');
+    if (!apiKey) {
+      return res.status(401).json({ error: 'missing_api_key', message: 'Attendee.ai API key is required' });
+    }
+
+    const response = await fetch('https://app.attendee.dev/api/v1/bots', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(req.body)
+    });
+
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error('[Proxy] Error proxying Attendee.ai create bot:', err);
+    res.status(500).json({ error: 'proxy_error', message: err?.message || String(err) });
+  }
+});
+
+// GET /api/attendee/bots/:botId/transcript - Get transcript
+app.get('/api/attendee/bots/:botId/transcript', async (req, res) => {
+  try {
+    const apiKey = req.get('x-attendee-api-key') || req.get('authorization')?.replace('Token ', '');
+    if (!apiKey) {
+      return res.status(401).json({ error: 'missing_api_key', message: 'Attendee.ai API key is required' });
+    }
+
+    const { botId } = req.params;
+    const response = await fetch(`https://app.attendee.dev/api/v1/bots/${botId}/transcript`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error('[Proxy] Error proxying Attendee.ai get transcript:', err);
+    res.status(500).json({ error: 'proxy_error', message: err?.message || String(err) });
+  }
+});
+
+// GET /api/attendee/bots/:botId - Get bot status
+app.get('/api/attendee/bots/:botId', async (req, res) => {
+  try {
+    const apiKey = req.get('x-attendee-api-key') || req.get('authorization')?.replace('Token ', '');
+    if (!apiKey) {
+      return res.status(401).json({ error: 'missing_api_key', message: 'Attendee.ai API key is required' });
+    }
+
+    const { botId } = req.params;
+    const response = await fetch(`https://app.attendee.dev/api/v1/bots/${botId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error('[Proxy] Error proxying Attendee.ai get bot:', err);
+    res.status(500).json({ error: 'proxy_error', message: err?.message || String(err) });
+  }
+});
 
 // Proxy to Anthropic Claude to avoid browser CORS
 app.post('/api/askClaude', async (req, res) => {

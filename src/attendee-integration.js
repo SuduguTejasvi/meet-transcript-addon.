@@ -28,8 +28,11 @@ export class AttendeeIntegration {
     // API base URL
     this.baseUrl = 'https://app.attendee.dev/api/v1';
     
-    // Proxy server URL for webhook polling
-    this.proxyServerUrl = credentials?.proxyServerUrl || 'http://localhost:8787';
+    // Proxy server URL for webhook polling and API calls
+    this.proxyServerUrl = credentials?.proxyServerUrl || credentials?.proxyUrl || 'http://localhost:8787';
+    
+    // Use proxy for all API calls when in browser environment (to avoid CORS)
+    this.useProxy = typeof window !== 'undefined';
     
     // Polling interval (in milliseconds) - poll every 2 seconds for real-time updates
     this.pollIntervalMs = 2000;
@@ -440,12 +443,25 @@ export class AttendeeIntegration {
         console.log('Using webhooks for real-time updates:', this.webhookUrl);
       }
 
-      const response = await fetch(`${this.baseUrl}/bots`, {
+      // Use proxy server to avoid CORS issues in browser
+      const url = this.useProxy 
+        ? `${this.proxyServerUrl}/api/attendee/bots`
+        : `${this.baseUrl}/bots`;
+      
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
+      if (this.useProxy) {
+        headers['x-attendee-api-key'] = this.apiKey;
+      } else {
+        headers['Authorization'] = `Token ${this.apiKey}`;
+      }
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Authorization': `Token ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        },
+        headers: headers,
         body: JSON.stringify(requestBody)
       });
 
@@ -483,12 +499,25 @@ export class AttendeeIntegration {
         throw new Error('Bot ID is required. Create a bot first.');
       }
 
-      const response = await fetch(`${this.baseUrl}/bots/${this.botId}/transcript`, {
+      // Use proxy server to avoid CORS issues in browser
+      const url = this.useProxy
+        ? `${this.proxyServerUrl}/api/attendee/bots/${this.botId}/transcript`
+        : `${this.baseUrl}/bots/${this.botId}/transcript`;
+      
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
+      if (this.useProxy) {
+        headers['x-attendee-api-key'] = this.apiKey;
+      } else {
+        headers['Authorization'] = `Token ${this.apiKey}`;
+      }
+
+      const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Authorization': `Token ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        }
+        headers: headers
       });
 
       if (!response.ok) {
@@ -764,12 +793,25 @@ export class AttendeeIntegration {
         throw new Error('Bot ID is required');
       }
 
-      const response = await fetch(`${this.baseUrl}/bots/${this.botId}`, {
+      // Use proxy server to avoid CORS issues in browser
+      const url = this.useProxy
+        ? `${this.proxyServerUrl}/api/attendee/bots/${this.botId}`
+        : `${this.baseUrl}/bots/${this.botId}`;
+      
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
+      if (this.useProxy) {
+        headers['x-attendee-api-key'] = this.apiKey;
+      } else {
+        headers['Authorization'] = `Token ${this.apiKey}`;
+      }
+
+      const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Authorization': `Token ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        }
+        headers: headers
       });
 
       if (!response.ok) {
