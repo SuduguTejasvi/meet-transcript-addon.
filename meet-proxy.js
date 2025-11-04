@@ -599,8 +599,31 @@ app.post('/api/askClaude', async (req, res) => {
   }
 });
 
+// Test endpoint to verify ngrok is forwarding requests
+app.get('/api/webhooks/attendee/test', (req, res) => {
+  console.log('[Webhook] Test endpoint hit!', {
+    timestamp: new Date().toISOString(),
+    headers: req.headers,
+    origin: req.headers.origin || 'none'
+  });
+  res.json({ 
+    success: true, 
+    message: 'Webhook endpoint is reachable',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Webhook endpoint for Attendee.ai transcript updates
 app.post('/api/webhooks/attendee', async (req, res) => {
+  // Add immediate logging to see if ANY request reaches this endpoint
+  console.log('[Webhook] ⚠️ Webhook endpoint HIT!', {
+    method: req.method,
+    headers: Object.keys(req.headers),
+    hasBody: !!req.body,
+    bodyKeys: req.body ? Object.keys(req.body) : [],
+    timestamp: new Date().toISOString()
+  });
+  
   try {
     const payload = req.body;
     const signature = req.header('X-Webhook-Signature') || '';
@@ -608,7 +631,8 @@ app.post('/api/webhooks/attendee', async (req, res) => {
     console.log('[Webhook] Received Attendee webhook:', {
       trigger: payload?.trigger,
       botId: payload?.bot_id,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      payloadKeys: payload ? Object.keys(payload) : []
     });
     
     // Verify webhook signature
