@@ -646,6 +646,12 @@ export class AttendeeIntegration {
 
       // Log initial state
       console.log('[Attendee] Transcription active. Waiting for transcripts...');
+      
+      // Check bot status to see if transcription has actually started
+      if (this.botId) {
+        this.checkBotStatusPeriodically();
+      }
+      
       if (this.onTranscriptUpdate) {
         // Show a placeholder message if UI supports it
         const placeholderEntry = {
@@ -787,6 +793,13 @@ export class AttendeeIntegration {
 
       const transcriptData = await this.getTranscript();
       
+      // Log raw response for first few polls to debug API format
+      if (this.pollCount === undefined) this.pollCount = 0;
+      this.pollCount++;
+      if (this.pollCount <= 5) {
+        console.log(`[Attendee] Poll #${this.pollCount}: Raw API response:`, JSON.stringify(transcriptData, null, 2));
+      }
+      
       // Handle different response formats from Attendee.ai API
       let entries = [];
       if (Array.isArray(transcriptData)) {
@@ -797,12 +810,17 @@ export class AttendeeIntegration {
         entries = Array.isArray(transcriptData.transcript) ? transcriptData.transcript : [transcriptData.transcript];
       } else if (transcriptData.data && Array.isArray(transcriptData.data)) {
         entries = transcriptData.data;
+      } else if (transcriptData.results && Array.isArray(transcriptData.results)) {
+        entries = transcriptData.results;
+      } else if (transcriptData && typeof transcriptData === 'object') {
+        // Log response structure if no entries found
+        if (this.pollCount <= 5) {
+          console.log(`[Attendee] Poll #${this.pollCount}: No entries found. Response keys:`, Object.keys(transcriptData));
+        }
       }
 
-      // Log for debugging (first few calls)
-      if (this.pollCount === undefined) this.pollCount = 0;
-      this.pollCount++;
-      if (this.pollCount <= 3 || entries.length > 0) {
+      // Log for debugging
+      if (this.pollCount <= 5 || entries.length > 0) {
         console.log(`[Attendee] Poll #${this.pollCount}: Found ${entries.length} transcript entries`);
         if (entries.length > 0) {
           console.log('[Attendee] Sample entry:', JSON.stringify(entries[0], null, 2));
@@ -814,7 +832,11 @@ export class AttendeeIntegration {
         this.processTranscriptEntries(entries);
       }
     } catch (error) {
-      console.error('Error polling transcript:', error);
+      console.error('[Attendee] Error polling transcript:', error);
+      // Log full error details for debugging
+      if (error.message) {
+        console.error('[Attendee] Error message:', error.message);
+      }
       // Don't stop polling on error, just log it
     }
   }
@@ -973,6 +995,42 @@ export class AttendeeIntegration {
       console.error('Error getting bot info:', error);
       throw error;
     }
+  }
+
+  /**
+   * Periodically check bot status to monitor when transcription starts
+   */
+  checkBotStatusPeriodically() {
+    // Check status every 5 seconds for first 30 seconds
+    let checkCount = 0;
+    const maxChecks = 6; // 6 checks * 5 seconds = 30 seconds
+    
+    const statusCheckInterval = setInterval(async () => {
+      if (!this.isActive || !this.botId || checkCount >= maxChecks) {
+        clearInterval(statusCheckInterval);
+        return;
+      }
+      
+      try {
+        const botInfo = await this.getBotInfo();
+        const state = botInfo.state || botInfo.status;
+        const transcriptionState = botInfo.transcription_state;
+        
+        checkCount++;
+        console.log(`[Attendee] Bot status check #${checkCount}: state=${state}, transcription_state=${transcriptionState}`);
+        
+        // Log when transcription actually starts
+        if (transcriptionState === 'active' || transcriptionState === 'started' || transcriptionState === 'transcribing') {
+          console.log('[Attendee] ✅ Transcription has started!');
+          clearInterval(statusCheckInterval);
+        } else if (state === 'active' && transcriptionState === 'not_started') {
+          console.log('[Attendee] ⚠️ Bot is active but transcription not started yet');
+        }
+      } catch (error) {
+        console.warn('[Attendee] Error checking bot status:', error.message);
+        checkCount++;
+      }
+    }, 5000); // Check every 5 seconds
   }
 
   /**

@@ -406,6 +406,13 @@ app.get('/api/attendee/bots/:botId/transcript', async (req, res) => {
     }
 
     const { botId } = req.params;
+    
+    // Log transcript requests for debugging
+    const requestCount = (global.transcriptRequestCount = (global.transcriptRequestCount || 0) + 1);
+    if (requestCount <= 5) {
+      console.log(`[Proxy] Transcript request #${requestCount} for bot: ${botId}`);
+    }
+    
     const response = await fetch(`https://app.attendee.dev/api/v1/bots/${botId}/transcript`, {
       method: 'GET',
       headers: {
@@ -415,6 +422,22 @@ app.get('/api/attendee/bots/:botId/transcript', async (req, res) => {
     });
 
     const data = await response.json();
+    
+    // Log response for first few requests to debug API format
+    if (requestCount <= 5) {
+      console.log(`[Proxy] Transcript API response (status ${response.status}):`, {
+        status: response.status,
+        hasData: !!data,
+        dataType: Array.isArray(data) ? 'array' : typeof data,
+        dataKeys: data && typeof data === 'object' ? Object.keys(data) : [],
+        entryCount: Array.isArray(data) ? data.length : (data?.entries?.length || data?.transcript?.length || data?.results?.length || 0)
+      });
+      
+      if (response.status === 404) {
+        console.log('[Proxy] No transcript yet (404 response) - bot may still be joining');
+      }
+    }
+    
     res.status(response.status).json(data);
   } catch (err) {
     console.error('[Proxy] Error proxying Attendee.ai get transcript:', err);
