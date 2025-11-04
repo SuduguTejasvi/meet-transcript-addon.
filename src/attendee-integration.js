@@ -29,10 +29,21 @@ export class AttendeeIntegration {
     this.baseUrl = 'https://app.attendee.dev/api/v1';
     
     // Proxy server URL for webhook polling and API calls
+    // In browser, always use proxy to avoid CORS. Default to localhost for local dev, 
+    // but should be set to public URL for production (GitHub Pages, etc.)
     this.proxyServerUrl = credentials?.proxyServerUrl || credentials?.proxyUrl || 'http://localhost:8787';
     
     // Use proxy for all API calls when in browser environment (to avoid CORS)
+    // Always use proxy in browser to avoid CORS issues
     this.useProxy = typeof window !== 'undefined';
+    
+    // Log proxy configuration for debugging
+    console.log('[Attendee] Proxy config initialized:', {
+      useProxy: this.useProxy,
+      proxyServerUrl: this.proxyServerUrl,
+      isBrowser: typeof window !== 'undefined',
+      location: typeof window !== 'undefined' ? window.location.href : 'N/A'
+    });
     
     // Polling interval (in milliseconds) - poll every 2 seconds for real-time updates
     this.pollIntervalMs = 2000;
@@ -149,8 +160,29 @@ export class AttendeeIntegration {
               // Often contains [version, channel, origin, projectNumber, ...]
               const possibleUrl = sdkData.find(item => typeof item === 'string' && item.includes('meet.google.com'));
               if (possibleUrl) {
-                console.log('✅ Found meeting URL from meet_sdk:', possibleUrl);
-                return possibleUrl;
+                // If it's just the base URL, try to extract meeting code from parent window
+                if (possibleUrl === 'https://meet.google.com' || possibleUrl.endsWith('meet.google.com/')) {
+                  console.log('⚠️ Found base URL from meet_sdk, trying to extract meeting code from parent...');
+                  // Try to get meeting code from parent window URL
+                  try {
+                    if (window.parent && window.parent !== window) {
+                      const parentUrl = window.parent.location.href;
+                      const meetingCodeMatch = parentUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+                      if (meetingCodeMatch && meetingCodeMatch[1]) {
+                        const fullUrl = `https://meet.google.com/${meetingCodeMatch[1]}`;
+                        console.log('✅ Extracted meeting URL from parent window:', fullUrl);
+                        return fullUrl;
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('Could not access parent window (cross-origin):', e.message);
+                  }
+                  // If parent access fails, don't return the base URL - continue to other methods
+                  console.log('⚠️ Could not extract meeting code, continuing to other detection methods');
+                } else {
+                  console.log('✅ Found meeting URL from meet_sdk:', possibleUrl);
+                  return possibleUrl;
+                }
               }
             }
           } catch (e) {
@@ -448,6 +480,15 @@ export class AttendeeIntegration {
         ? `${this.proxyServerUrl}/api/attendee/bots`
         : `${this.baseUrl}/bots`;
       
+      // Debug logging
+      console.log('[Attendee] Proxy configuration:', {
+        useProxy: this.useProxy,
+        proxyServerUrl: this.proxyServerUrl,
+        baseUrl: this.baseUrl,
+        finalUrl: url,
+        isBrowser: typeof window !== 'undefined'
+      });
+      
       const headers = {
         'Content-Type': 'application/json'
       };
@@ -455,8 +496,10 @@ export class AttendeeIntegration {
       // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
       if (this.useProxy) {
         headers['x-attendee-api-key'] = this.apiKey;
+        console.log('[Attendee] Using proxy server:', url);
       } else {
         headers['Authorization'] = `Token ${this.apiKey}`;
+        console.log('[Attendee] Using direct API (not in browser):', url);
       }
 
       const response = await fetch(url, {

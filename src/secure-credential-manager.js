@@ -72,7 +72,14 @@ export class SecureCredentialManager {
           attendeeApiKey: process.env.ATTENDEE_API_KEY || '',
           claudeApiKey: process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '',
           oauthClientId: process.env.OAUTH_CLIENT_ID || '409997382473-c9kq9iijvgibd139ngrg8acitiip22vl.apps.googleusercontent.com',
-          proxyUrl: process.env.MEET_PROXY_URL || 'http://localhost:8787', // Default to meet-proxy.js server
+          // For production (GitHub Pages), you MUST set MEET_PROXY_URL to a public URL
+          // Example: https://your-proxy.railway.app or https://your-proxy.render.com
+          // For local development: http://localhost:8787
+          // For testing with ngrok: https://your-ngrok-url.ngrok.io
+          proxyUrl: process.env.MEET_PROXY_URL || 
+                    (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                      ? 'http://localhost:8787'
+                      : null), // Will be set to a warning if not configured
           mainStageUrl: process.env.MAIN_STAGE_URL || window.location.origin + '/mainstage.html',
           sidePanelUrl: process.env.SIDE_PANEL_URL || window.location.origin + '/sidepanel.html',
           eventsBackendUrl: process.env.EVENTS_BACKEND_URL || null,

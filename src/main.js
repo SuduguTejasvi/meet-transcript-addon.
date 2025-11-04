@@ -230,11 +230,42 @@ function initializeAttendeeIntegration() {
                       null;
     
     // Create AttendeeIntegration instance
+    // Determine proxy URL - use credentials proxyUrl or proxyServerUrl, with fallback
+    // For GitHub Pages, you need a publicly accessible proxy URL (not localhost)
+    // Options:
+    // 1. Deploy proxy server to a public URL (Railway, Render, etc.)
+    // 2. Use ngrok for local development: ngrok http 8787
+    // 3. Set MEET_PROXY_URL environment variable in your deployment
+    let proxyUrl = credentials?.proxyUrl || credentials?.proxyServerUrl;
+    
+    if (!proxyUrl) {
+      // Default to localhost for local development
+      // For production (GitHub Pages), you MUST set this to a public URL
+      if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+          proxyUrl = 'http://localhost:8787';
+        } else {
+          // For GitHub Pages or other production, you need a public proxy URL
+          // This should be set via environment variable or credentials
+          console.warn('[Attendee] ⚠️ Running from production domain but no proxy URL configured. Requests will fail.');
+          console.warn('[Attendee] Set MEET_PROXY_URL environment variable or configure proxyUrl in credentials.');
+          proxyUrl = 'http://localhost:8787'; // Will fail in production - user must configure
+        }
+      } else {
+        proxyUrl = 'http://localhost:8787';
+      }
+    }
+    
+    console.log('[Attendee] Initializing with proxy URL:', proxyUrl);
+    console.log('[Attendee] Current location:', typeof window !== 'undefined' ? window.location.href : 'N/A');
+    
     attendeeIntegration = new AttendeeIntegration(
       attendeeApiKey,
       {
         ...credentials,
-        proxyServerUrl: credentials?.proxyServerUrl || 'http://localhost:8787'
+        proxyServerUrl: proxyUrl,
+        proxyUrl: proxyUrl // Support both property names
       },
       {
         sidePanelClient: sidePanelClient,
@@ -1375,27 +1406,65 @@ async function startAttendeeTranscript() {
       }
     }
     
-    // Get meeting URL
-    let meetingUrl = await attendeeIntegration.getMeetingUrl();
+    // Get meeting URL - first check manual input, then try auto-detection
+    let meetingUrl = null;
     
-    // If automatic detection fails, show manual input
-    if (!meetingUrl) {
-      const meetingUrlInput = document.getElementById('meeting-url-input');
-      if (meetingUrlInput && meetingUrlInput.value.trim()) {
-        meetingUrl = meetingUrlInput.value.trim();
-        // Ensure it's a full URL
-        if (!meetingUrl.includes('http')) {
-          meetingUrl = `https://meet.google.com/${meetingUrl.replace(/^\/+|\/+$/g, '')}`;
-        }
-      } else {
-        // Show manual input container
-        const meetingUrlContainer = document.getElementById('meeting-url-input-container');
-        if (meetingUrlContainer) {
-          meetingUrlContainer.style.display = 'block';
-        }
-        throw new Error('Could not detect meeting URL. Please enter it manually.');
+    // Priority 1: Check manual input fields first
+    const meetingUrlInput = document.getElementById('meeting-url-input');
+    const spaceNameInput = document.getElementById('space-name-input');
+    
+    if (meetingUrlInput && meetingUrlInput.value.trim()) {
+      meetingUrl = meetingUrlInput.value.trim();
+      // Ensure it's a full URL
+      if (!meetingUrl.includes('http')) {
+        meetingUrl = `https://meet.google.com/${meetingUrl.replace(/^\/+|\/+$/g, '')}`;
+      }
+      console.log('[Attendee] Using meeting URL from input field:', meetingUrl);
+    } else if (spaceNameInput && spaceNameInput.value.trim()) {
+      // If space name is provided, extract meeting code from it
+      const spaceName = spaceNameInput.value.trim();
+      console.log('[Attendee] Space name provided:', spaceName);
+      
+      // Space name format: "spaces/AAAA-BBBB-CCC" or just "AAAA-BBBB-CCC"
+      let meetingCode = spaceName;
+      if (spaceName.startsWith('spaces/')) {
+        meetingCode = spaceName.replace('spaces/', '');
+      }
+      
+      // Remove any spaces or special characters, keep only alphanumeric and hyphens
+      meetingCode = meetingCode.replace(/[^a-z0-9-]/gi, '');
+      
+      if (meetingCode && meetingCode.length > 0) {
+        meetingUrl = `https://meet.google.com/${meetingCode}`;
+        console.log('[Attendee] Constructed meeting URL from space name:', meetingUrl);
       }
     }
+    
+    // Priority 2: Try automatic detection if no manual input
+    if (!meetingUrl || meetingUrl === 'https://meet.google.com') {
+      console.log('[Attendee] Trying automatic meeting URL detection...');
+      const detectedUrl = await attendeeIntegration.getMeetingUrl();
+      
+      // Only use detected URL if it's a complete URL (not just base URL)
+      if (detectedUrl && detectedUrl !== 'https://meet.google.com' && detectedUrl !== 'https://meet.google.com/') {
+        meetingUrl = detectedUrl;
+        console.log('[Attendee] Using detected meeting URL:', meetingUrl);
+      } else {
+        console.log('[Attendee] Detected URL is incomplete:', detectedUrl);
+      }
+    }
+    
+    // Priority 3: If still no valid URL, show manual input
+    if (!meetingUrl || meetingUrl === 'https://meet.google.com' || meetingUrl === 'https://meet.google.com/') {
+      // Show manual input container
+      const meetingUrlContainer = document.getElementById('meeting-url-input-container');
+      if (meetingUrlContainer) {
+        meetingUrlContainer.style.display = 'block';
+      }
+      throw new Error('Could not detect complete meeting URL. Please enter the meeting code (e.g., "abc-defg-hij") or full URL manually.');
+    }
+    
+    console.log('[Attendee] Final meeting URL to use:', meetingUrl);
     
     // Start transcription (this creates the bot and starts polling/webhook polling)
     await attendeeIntegration.startTranscription(meetingUrl);
