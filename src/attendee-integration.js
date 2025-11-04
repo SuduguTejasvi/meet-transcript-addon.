@@ -469,15 +469,32 @@ export class AttendeeIntegration {
         }
       };
 
-      // Add webhooks if configured
-      if (this.useWebhooks && this.webhookUrl) {
+      // Add webhooks if configured (check both webhookUrl and try to construct from proxy)
+      let effectiveWebhookUrl = this.webhookUrl;
+      if (!effectiveWebhookUrl && this.useProxy && this.proxyServerUrl) {
+        try {
+          const proxyUrl = new URL(this.proxyServerUrl);
+          // For localhost, we can't use webhooks (they need HTTPS), but log it
+          if (proxyUrl.protocol === 'https:') {
+            effectiveWebhookUrl = `${this.proxyServerUrl}/api/webhooks/attendee`;
+            console.log('[Attendee] Will use proxy webhook URL:', effectiveWebhookUrl);
+          } else {
+            console.log('[Attendee] Proxy is HTTP (localhost), webhooks require HTTPS. Using API polling instead.');
+          }
+        } catch (e) {
+          // Invalid URL, skip
+        }
+      }
+
+      if (effectiveWebhookUrl) {
         requestBody.webhooks = [
           {
-            url: this.webhookUrl,
+            url: effectiveWebhookUrl,
             triggers: ['transcript.update', 'bot.state_change']
           }
         ];
-        console.log('Using webhooks for real-time updates:', this.webhookUrl);
+        console.log('Using webhooks for real-time updates:', effectiveWebhookUrl);
+        this.setWebhookUrl(effectiveWebhookUrl);
       }
 
       // Use proxy server to avoid CORS issues in browser
@@ -609,6 +626,55 @@ export class AttendeeIntegration {
       this.lastWebhookTimestamp = 0;
       this.pollCount = 0; // Reset poll count
 
+      // Wait for bot to join and transcription to start
+      console.log('[Attendee] Waiting for bot to join meeting and transcription to start...');
+      let transcriptionStarted = false;
+      const maxWaitTime = 60000; // Wait up to 60 seconds
+      const checkInterval = 2000; // Check every 2 seconds
+      const startTime = Date.now();
+      
+      while (!transcriptionStarted && (Date.now() - startTime) < maxWaitTime) {
+        try {
+          const botInfo = await this.getBotInfo();
+          const state = botInfo.state || botInfo.status;
+          const transcriptionState = botInfo.transcription_state;
+          
+          console.log(`[Attendee] Bot status: state=${state}, transcription_state=${transcriptionState}`);
+          
+          // Check if transcription has started
+          if (transcriptionState === 'active' || transcriptionState === 'started' || transcriptionState === 'transcribing') {
+            transcriptionStarted = true;
+            console.log('[Attendee] ✅ Transcription has started!');
+            break;
+          }
+          
+          // If bot has joined but transcription not started, wait a bit more
+          if (state === 'joined_recording' || state === 'active') {
+            if (transcriptionState === 'not_started') {
+              console.log('[Attendee] ⚠️ Bot joined but transcription not started yet. This may be because:');
+              console.log('[Attendee]   1. No participants are speaking (all muted)');
+              console.log('[Attendee]   2. Transcription needs audio input to activate');
+              console.log('[Attendee]   3. Waiting for meeting audio stream...');
+              // Continue waiting, but don't block forever
+            }
+          }
+          
+          // Wait before next check
+          await new Promise(resolve => setTimeout(resolve, checkInterval));
+        } catch (error) {
+          console.warn('[Attendee] Error checking bot status:', error.message);
+          // Continue waiting despite errors
+          await new Promise(resolve => setTimeout(resolve, checkInterval));
+        }
+      }
+      
+      if (!transcriptionStarted) {
+        console.warn('[Attendee] ⚠️ Transcription did not start automatically. This is normal if:');
+        console.warn('[Attendee]   - All participants are muted');
+        console.warn('[Attendee]   - No one is speaking');
+        console.warn('[Attendee] Transcription will start automatically when audio is detected.');
+      }
+
       // If webhook URL is configured, use webhook polling
       // Otherwise, construct webhook URL from proxy server if available
       let effectiveWebhookUrl = this.webhookUrl;
@@ -647,7 +713,7 @@ export class AttendeeIntegration {
       // Log initial state
       console.log('[Attendee] Transcription active. Waiting for transcripts...');
       
-      // Check bot status to see if transcription has actually started
+      // Continue checking bot status periodically
       if (this.botId) {
         this.checkBotStatusPeriodically();
       }
