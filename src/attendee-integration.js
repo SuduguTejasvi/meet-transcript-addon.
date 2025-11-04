@@ -451,15 +451,20 @@ export class AttendeeIntegration {
       console.log('Creating Attendee.ai bot for meeting:', meetingUrl);
 
       // Build request body
+      // Extract meeting code for bot name (e.g., "dbg-jzza-zte" from "https://meet.google.com/dbg-jzza-zte")
+      const meetingCodeMatch = meetingUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+      const meetingCode = meetingCodeMatch ? meetingCodeMatch[1] : 'meet-bot';
+      const botName = `Transcript Bot - ${meetingCode}`;
+
       const requestBody = {
         meeting_url: meetingUrl,
+        bot_name: botName, // Required field
         // Optional: Configure transcription settings
         transcription_settings: {
           deepgram: {
             language: 'en-US',
-            model: 'nova-2',
-            punctuate: true,
-            smart_format: true
+            model: 'nova-2'
+            // Note: 'punctuate' and 'smart_format' are not allowed by Attendee.ai API
           }
         }
       };

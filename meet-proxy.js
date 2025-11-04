@@ -360,6 +360,13 @@ app.post('/api/attendee/bots', async (req, res) => {
       return res.status(401).json({ error: 'missing_api_key', message: 'Attendee.ai API key is required' });
     }
 
+    console.log('[Proxy] Creating Attendee bot:', {
+      hasApiKey: !!apiKey,
+      apiKeyLength: apiKey?.length,
+      requestBody: req.body,
+      origin: req.headers.origin
+    });
+
     const response = await fetch('https://app.attendee.dev/api/v1/bots', {
       method: 'POST',
       headers: {
@@ -369,7 +376,20 @@ app.post('/api/attendee/bots', async (req, res) => {
       body: JSON.stringify(req.body)
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      data = { error: 'invalid_json', raw: responseText };
+    }
+
+    console.log('[Proxy] Attendee.ai response:', {
+      status: response.status,
+      statusText: response.statusText,
+      data: data
+    });
+
     res.status(response.status).json(data);
   } catch (err) {
     console.error('[Proxy] Error proxying Attendee.ai create bot:', err);
