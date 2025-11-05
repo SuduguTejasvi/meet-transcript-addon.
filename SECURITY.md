@@ -40,6 +40,10 @@ CLOUD_PROJECT_NUMBER=409997382473
 # Deepgram API Configuration
 DEEPGRAM_API_KEY=306114cbf5e0f315e34cc259af3d16b9fe000992
 
+# Anthropic/Claude API Configuration (for question generation)
+# Get this from https://console.anthropic.com/
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
 # Application URLs
 MAIN_STAGE_URL=https://your-domain.com/mainstage.html
 SIDE_PANEL_URL=https://your-domain.com/sidepanel.html

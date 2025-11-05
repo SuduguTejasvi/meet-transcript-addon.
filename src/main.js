@@ -1718,11 +1718,6 @@ async function sendQuestionToAI() {
     answerEl.style.display = 'block';
     answerEl.textContent = 'Generating question from conversation...';
     
-    if (!claudeApiKey) {
-      answerEl.textContent = 'Claude API key not configured. Please set ANTHROPIC_API_KEY environment variable.';
-      return;
-    }
-    
     // Get proxy URL dynamically
     let proxyUrl = 'http://localhost:8787'; // Default
     if (typeof window !== 'undefined') {
@@ -1754,12 +1749,19 @@ ${transcriptText}
 
 Generate a single question based on this conversation:`;
     
+    // Build headers - API key is optional since proxy server will use its own env variable
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    // Only include API key in header if available (proxy server will use env var as primary)
+    if (claudeApiKey) {
+      headers['x-claude-key'] = claudeApiKey;
+    }
+    
     const res = await fetch(`${proxyUrl}/api/askClaude`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-claude-key': claudeApiKey
-      },
+      headers: headers,
       body: JSON.stringify({ 
         prompt,
         max_tokens: 200 // Limit tokens for question generation

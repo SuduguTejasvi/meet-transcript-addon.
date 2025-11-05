@@ -584,9 +584,10 @@ app.get('/api/attendee/bots/:botId', async (req, res) => {
 // Proxy to Anthropic Claude to avoid browser CORS
 app.post('/api/askClaude', async (req, res) => {
   try {
-    const claudeKey = req.get('x-claude-key');
+    // Use environment variable first, fallback to request header if provided
+    const claudeKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || req.get('x-claude-key');
     const { prompt, model, max_tokens } = req.body || {};
-    if (!claudeKey) return res.status(401).json({ error: 'missing_api_key' });
+    if (!claudeKey) return res.status(401).json({ error: 'missing_api_key', message: 'ANTHROPIC_API_KEY must be set in proxy server environment or provided in x-claude-key header' });
     if (!prompt) return res.status(400).json({ error: 'missing_prompt' });
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
