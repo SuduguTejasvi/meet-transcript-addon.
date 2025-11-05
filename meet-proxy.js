@@ -611,7 +611,7 @@ app.post('/api/askClaude', async (req, res) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: model || 'claude-3-5-sonnet-20240620',
+        model: model || 'claude-3-5-haiku-20241022',
         max_tokens: max_tokens || 512,
         messages: [
           { role: 'user', content: prompt }

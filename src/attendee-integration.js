@@ -48,10 +48,10 @@ export class AttendeeIntegration {
       location: typeof window !== 'undefined' ? window.location.href : 'N/A'
     });
     
-    // Polling interval (in milliseconds) - poll every 1.5 seconds for more real-time updates
-    this.pollIntervalMs = 1500;
+    // Polling interval (in milliseconds) - poll every 500ms for lower latency
+    this.pollIntervalMs = 500;
     // Webhook polling interval (faster since webhooks are more real-time)
-    this.webhookPollIntervalMs = 300; // Reduced to 300ms for lower latency
+    this.webhookPollIntervalMs = 200; // Reduced to 200ms for lowest latency
   }
 
   /**
@@ -770,14 +770,14 @@ export class AttendeeIntegration {
       }
 
       // Use webhooks if available (faster and more real-time)
-      // Also add API polling as fallback every 10 seconds to catch any missed transcripts
+      // Also add API polling as fallback every 2 seconds to catch any missed transcripts
       if (this.useWebhooks && effectiveWebhookUrl) {
         console.log('Starting webhook-based transcription polling (primary method)...');
         this.startWebhookPolling();
         
-        // Add API polling as fallback every 10 seconds to reduce latency
+        // Add API polling as fallback every 2 seconds to reduce latency
         // This ensures we catch transcripts even if webhooks are delayed
-        console.log('Starting API fallback polling (every 10 seconds)...');
+        console.log('Starting API fallback polling (every 2 seconds)...');
         this.startApiFallbackPolling();
       } else {
         console.log('Starting API-based transcription polling (no webhooks configured)...');
@@ -938,10 +938,10 @@ export class AttendeeIntegration {
     // Poll immediately
     this.pollTranscript();
 
-    // Then poll at 10-second intervals as fallback
+    // Then poll at 2-second intervals as fallback (reduced from 10s for lower latency)
     this.apiFallbackInterval = setInterval(() => {
       this.pollTranscript();
-    }, 10000); // 10 seconds = 10000ms
+    }, 2000); // 2 seconds = 2000ms (reduced from 10s for lower latency)
   }
 
   /**

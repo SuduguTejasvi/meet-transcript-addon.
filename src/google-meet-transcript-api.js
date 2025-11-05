@@ -25,8 +25,8 @@ export class GoogleMeetTranscriptAPI {
     this.onTranscriptUpdate = null;
     this.onError = null;
     
-    // Polling interval (in milliseconds) - poll every 2 seconds for real-time updates
-    this.pollIntervalMs = 2000;
+    // Polling interval (in milliseconds) - poll every 1 second for lower latency
+    this.pollIntervalMs = 1000;
     console.log('[GMTA] Constructed GoogleMeetTranscriptAPI', {
       proxyUrl: this.proxyUrl || 'http://localhost:8787'
     });

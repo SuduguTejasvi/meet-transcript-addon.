@@ -1842,11 +1842,7 @@ async function sendQuestionToAI() {
     // Prompt to generate a question based on the conversation
     const prompt = `You are an assistant analyzing a meeting conversation. Based on the following transcript of the conversation, generate a thoughtful and relevant question that would help clarify or explore the topics discussed.
 
-The question should be:
-- Relevant to the conversation that has taken place
-- Thoughtful and engaging
-- Helpful for understanding or further discussion of the topics
-- Written in natural, conversational language
+IMPORTANT: Return ONLY the question itself, without any explanation, analysis, or additional text. Just output the question.
 
 Transcript of the conversation:
 ${transcriptText}
@@ -1878,10 +1874,78 @@ Generate a single question based on this conversation:`;
     }
     
     const data = await res.json();
-    const generatedQuestion = data.answer || 'No question generated.';
+    let generatedQuestion = data.answer || 'No question generated.';
     
-    // Display the generated question
-    answerEl.textContent = `Generated Question: ${generatedQuestion}`;
+    // Clean up the response - remove any explanatory text or analysis
+    // Look for patterns like "Here's a thoughtful follow-up question:" or "This question:"
+    generatedQuestion = generatedQuestion.trim();
+    
+    // Remove common prefixes
+    const prefixes = [
+      /^Here's a thoughtful follow-up question:\s*/i,
+      /^Here's a question:\s*/i,
+      /^Question:\s*/i,
+      /^Generated question:\s*/i,
+      /^Based on the conversation, here's a question:\s*/i
+    ];
+    
+    for (const prefix of prefixes) {
+      generatedQuestion = generatedQuestion.replace(prefix, '');
+    }
+    
+    // Remove anything after patterns like "This question:" or bullet points with explanations
+    const explanationPatterns = [
+      /\s*This question:\s*$/i,
+      /\s*This question:\s*-/i,
+      /\n\s*This question:\s*/i,
+      /\n\s*-.*$/i,  // Remove bullet points
+      /\n\s*The question.*$/i
+    ];
+    
+    for (const pattern of explanationPatterns) {
+      const match = generatedQuestion.match(pattern);
+      if (match) {
+        generatedQuestion = generatedQuestion.substring(0, match.index).trim();
+        break;
+      }
+    }
+    
+    // Remove any trailing explanations (lines starting with "-" or containing "Directly relates", etc.)
+    const lines = generatedQuestion.split('\n');
+    const cleanLines = [];
+    let foundExplanation = false;
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      // Stop if we hit explanation markers
+      if (trimmedLine.startsWith('-') && (
+        trimmedLine.includes('Directly relates') ||
+        trimmedLine.includes('Encourages') ||
+        trimmedLine.includes('Asks for') ||
+        trimmedLine.includes('Is written') ||
+        trimmedLine.includes('Seeks to')
+      )) {
+        foundExplanation = true;
+        break;
+      }
+      // Stop if we hit "This question:" pattern
+      if (trimmedLine.toLowerCase().includes('this question:')) {
+        foundExplanation = true;
+        break;
+      }
+      cleanLines.push(line);
+    }
+    
+    generatedQuestion = cleanLines.join('\n').trim();
+    
+    // If we have quotes, extract just the question inside
+    const quotedMatch = generatedQuestion.match(/"([^"]+)"/);
+    if (quotedMatch) {
+      generatedQuestion = quotedMatch[1];
+    }
+    
+    // Display the generated question (just the question, no prefix)
+    answerEl.textContent = generatedQuestion || 'No question generated.';
     
     // Optionally pre-fill the question input field if it exists
     if (questionInput) {
