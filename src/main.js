@@ -479,6 +479,33 @@ export async function setUpAddon() {
       aiSendBtn.addEventListener('click', sendQuestionToAI);
     }
     
+    // Load Claude API key from localStorage if available
+    const claudeApiKeyInput = document.getElementById('claude-api-key-input');
+    if (claudeApiKeyInput && typeof window !== 'undefined') {
+      const savedKey = localStorage.getItem('CLAUDE_API_KEY');
+      if (savedKey) {
+        claudeApiKeyInput.value = savedKey;
+        // Also set it in credentials for immediate use
+        if (credentials) {
+          credentials.claudeApiKey = savedKey;
+        }
+        claudeApiKey = savedKey;
+      }
+      
+      // Save API key to localStorage when user types it
+      claudeApiKeyInput.addEventListener('blur', () => {
+        const key = claudeApiKeyInput.value.trim();
+        if (key) {
+          localStorage.setItem('CLAUDE_API_KEY', key);
+          if (credentials) {
+            credentials.claudeApiKey = key;
+          }
+          claudeApiKey = key;
+          console.log('✅ Claude API key saved to localStorage');
+        }
+      });
+    }
+    
     console.log('Add-on initialized successfully');
     showStatus('Add-on loaded successfully!', 'success');
   } catch (error) {
@@ -1718,6 +1745,31 @@ async function sendQuestionToAI() {
     answerEl.style.display = 'block';
     answerEl.textContent = 'Generating question from conversation...';
     
+    // Get Claude API key from various sources (localStorage, credentials, or input field)
+    let apiKeyToUse = claudeApiKey;
+    if (!apiKeyToUse && typeof window !== 'undefined') {
+      // Try localStorage
+      apiKeyToUse = localStorage.getItem('CLAUDE_API_KEY');
+      // Try input field
+      if (!apiKeyToUse) {
+        const keyInput = document.getElementById('claude-api-key-input');
+        if (keyInput && keyInput.value.trim()) {
+          apiKeyToUse = keyInput.value.trim();
+          // Save to localStorage for future use
+          localStorage.setItem('CLAUDE_API_KEY', apiKeyToUse);
+        }
+      }
+      // Try credentials
+      if (!apiKeyToUse && credentials) {
+        apiKeyToUse = credentials.claudeApiKey;
+      }
+    }
+    
+    if (!apiKeyToUse) {
+      answerEl.textContent = 'Please enter your Claude API key in the field above. Get it from https://console.anthropic.com/';
+      return;
+    }
+    
     // Get proxy URL dynamically
     let proxyUrl = 'http://localhost:8787'; // Default
     if (typeof window !== 'undefined') {
@@ -1749,15 +1801,11 @@ ${transcriptText}
 
 Generate a single question based on this conversation:`;
     
-    // Build headers - API key is optional since proxy server will use its own env variable
+    // Build headers - send API key from frontend (proxy server will use env var if available, otherwise this header)
     const headers = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'x-claude-key': apiKeyToUse
     };
-    
-    // Only include API key in header if available (proxy server will use env var as primary)
-    if (claudeApiKey) {
-      headers['x-claude-key'] = claudeApiKey;
-    }
     
     const res = await fetch(`${proxyUrl}/api/askClaude`, {
       method: 'POST',

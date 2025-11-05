@@ -356,6 +356,16 @@
             <h3>Transcripts</h3>
             <div id="transcript-container" style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px; height:220px; overflow-y:auto; font-family:monospace; font-size:13px; white-space:pre-wrap;"></div>
             <div style="margin-top:10px;">
+                <div style="margin-bottom:8px; padding:8px; background:#fff3cd; border-radius:6px; border-left:3px solid #ffc107;">
+                    <label for="claude-api-key-input" style="display:block; font-size:12px; color:#856404; margin-bottom:4px; font-weight:500;">
+                        🔑 Claude API Key (Optional - for question generation):
+                    </label>
+                    <input id="claude-api-key-input" type="password" placeholder="Enter your Anthropic API key..." 
+                           style="width:100%; padding:6px; border:1px solid #dadce0; border-radius:4px; font-size:12px;">
+                    <small style="display:block; color:#856404; font-size:11px; margin-top:4px;">
+                        Stored in browser localStorage. Get your key from <a href="https://console.anthropic.com/" target="_blank" style="color:#1a73e8;">Anthropic Console</a>
+                    </small>
+                </div>
                 <input id="ai-question-input" type="text" placeholder="Question will be auto-generated from conversation..." 
                        style="width:100%; padding:8px; border:1px solid #dadce0; border-radius:6px; font-size:14px; margin-bottom:8px;">
                 <button id="ai-send-btn" class="btn" style="width:100%; background:#1a73e8; color:white;">Get Question</button>
