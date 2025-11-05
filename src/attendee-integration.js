@@ -833,6 +833,8 @@ export class AttendeeIntegration {
       clearInterval(this.webhookPollInterval);
     }
 
+    console.log('[Attendee] Starting webhook polling (interval: ' + this.webhookPollIntervalMs + 'ms)');
+    
     // Poll immediately
     this.pollWebhookTranscripts();
 
@@ -874,6 +876,11 @@ export class AttendeeIntegration {
       const data = await response.json();
       const newTranscripts = data.transcripts || [];
 
+      // Add logging to see what we're getting
+      if (newTranscripts.length > 0) {
+        console.log(`[Attendee] Webhook poll: Found ${newTranscripts.length} new transcript(s) from webhook endpoint`);
+      }
+
       if (newTranscripts.length > 0) {
         // Process bot state changes separately
         const stateChanges = newTranscripts.filter(e => e.type === 'bot_state_change');
@@ -905,6 +912,7 @@ export class AttendeeIntegration {
         
         // Use the same deduplication logic as API polling
         if (apiFormatEntries.length > 0) {
+          console.log(`[Attendee] Processing ${apiFormatEntries.length} webhook transcript entry(s)`);
           this.processTranscriptEntries(apiFormatEntries);
         }
 
@@ -1241,16 +1249,9 @@ export class AttendeeIntegration {
 
       const botInfo = await response.json();
       
-      // Log ALL events to understand their structure (not just transcript ones)
+      // Only log events if there are transcript events (reduce spam)
       if (botInfo.events && Array.isArray(botInfo.events) && botInfo.events.length > 0) {
-        console.log(`[Attendee] Bot has ${botInfo.events.length} events. Inspecting all events...`);
-        
-        // Log first few events to see their structure
-        botInfo.events.slice(0, 3).forEach((event, index) => {
-          console.log(`[Attendee] Event #${index + 1}:`, JSON.stringify(event, null, 2));
-        });
-        
-        // Check for transcript events
+        // Check for transcript events first
         const transcriptEvents = botInfo.events.filter(e => {
           const eventStr = JSON.stringify(e).toLowerCase();
           return eventStr.includes('transcript') || 
@@ -1265,12 +1266,10 @@ export class AttendeeIntegration {
         if (transcriptEvents.length > 0) {
           console.log(`[Attendee] ✅ Found ${transcriptEvents.length} transcript event(s) in bot events!`);
           console.log('[Attendee] Processing transcript events...');
-          
           // Process events as transcripts
           this.processBotEventsAsTranscripts(transcriptEvents);
-        } else {
-          console.log('[Attendee] No transcript events found in bot events');
         }
+        // Don't log "No transcript events" - it's too verbose
       }
       
       return botInfo;
@@ -1373,14 +1372,20 @@ export class AttendeeIntegration {
         const transcriptionState = botInfo.transcription_state;
         
         checkCount++;
-        console.log(`[Attendee] Bot status check #${checkCount}: state=${state}, transcription_state=${transcriptionState}`);
+        // Only log every 2nd check to reduce console spam
+        if (checkCount % 2 === 0) {
+          console.log(`[Attendee] Bot status check #${checkCount}: state=${state}, transcription_state=${transcriptionState}`);
+        }
         
         // Log when transcription actually starts
         if (transcriptionState === 'active' || transcriptionState === 'started' || transcriptionState === 'transcribing') {
           console.log('[Attendee] ✅ Transcription has started!');
           clearInterval(statusCheckInterval);
         } else if (state === 'active' && transcriptionState === 'not_started') {
-          console.log('[Attendee] ⚠️ Bot is active but transcription not started yet');
+          // Only log this warning once
+          if (checkCount === 1) {
+            console.log('[Attendee] ⚠️ Bot is active but transcription not started yet');
+          }
         }
       } catch (error) {
         console.warn('[Attendee] Error checking bot status:', error.message);
