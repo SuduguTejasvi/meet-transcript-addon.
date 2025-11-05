@@ -50,8 +50,10 @@ export class AttendeeIntegration {
     
     // Polling interval (in milliseconds) - poll every 500ms for lower latency
     this.pollIntervalMs = 500;
-    // Webhook polling interval (faster since webhooks are more real-time)
-    this.webhookPollIntervalMs = 200; // Reduced to 200ms for lowest latency
+    // Webhook polling interval (balance between latency and connection stability)
+    this.webhookPollIntervalMs = 500; // 500ms for stability (was 200ms, too aggressive causing connection issues)
+    this.webhookPollErrorCount = 0; // Track consecutive errors for backoff
+    this.maxWebhookPollErrors = 5; // Max errors before increasing interval
   }
 
   /**
@@ -833,6 +835,9 @@ export class AttendeeIntegration {
       clearInterval(this.webhookPollInterval);
     }
 
+    // Reset error count when starting
+    this.webhookPollErrorCount = 0;
+    
     console.log('[Attendee] Starting webhook polling (interval: ' + this.webhookPollIntervalMs + 'ms)');
     
     // Poll immediately
@@ -863,15 +868,43 @@ export class AttendeeIntegration {
         headers['ngrok-skip-browser-warning'] = 'true';
       }
       
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(url, {
         method: 'GET',
-        headers: headers
+        headers: headers,
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        console.warn('Error polling webhook transcripts:', response.status);
+        // Handle different error statuses
+        if (response.status === 429) {
+          // Rate limited - increase polling interval temporarily
+          console.warn('[Attendee] Rate limited, slowing down polling');
+          this.webhookPollErrorCount++;
+          if (this.webhookPollErrorCount >= this.maxWebhookPollErrors) {
+            // Temporarily increase interval
+            const currentInterval = this.webhookPollIntervalMs;
+            this.webhookPollIntervalMs = Math.min(currentInterval * 2, 5000); // Max 5 seconds
+            console.log(`[Attendee] Increased webhook polling interval to ${this.webhookPollIntervalMs}ms`);
+            // Restart polling with new interval
+            if (this.webhookPollInterval) {
+              clearInterval(this.webhookPollInterval);
+              this.startWebhookPolling();
+            }
+          }
+        }
+        console.warn('[Attendee] Error polling webhook transcripts:', response.status);
+        this.webhookPollErrorCount++;
         return;
       }
+      
+      // Reset error count on success
+      this.webhookPollErrorCount = 0;
 
       const data = await response.json();
       const newTranscripts = data.transcripts || [];
@@ -922,8 +955,35 @@ export class AttendeeIntegration {
         }
       }
     } catch (error) {
-      console.error('Error polling webhook transcripts:', error);
-      // Don't stop polling on error, just log it
+      // Handle specific error types
+      if (error.name === 'AbortError') {
+        console.warn('[Attendee] Webhook polling request timed out');
+      } else if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('ERR_CONNECTION_CLOSED'))) {
+        console.warn('[Attendee] Connection error during webhook polling (connection closed or network issue)');
+        this.webhookPollErrorCount++;
+        
+        // If too many errors, increase polling interval
+        if (this.webhookPollErrorCount >= this.maxWebhookPollErrors) {
+          const currentInterval = this.webhookPollIntervalMs;
+          this.webhookPollIntervalMs = Math.min(currentInterval * 1.5, 3000); // Max 3 seconds
+          console.log(`[Attendee] Increased webhook polling interval to ${this.webhookPollIntervalMs}ms due to connection errors`);
+          // Restart polling with new interval
+          if (this.webhookPollInterval) {
+            clearInterval(this.webhookPollInterval);
+            // Wait a bit before restarting
+            setTimeout(() => {
+              if (this.isActive) {
+                this.startWebhookPolling();
+              }
+            }, 1000);
+          }
+        }
+      } else {
+        console.error('[Attendee] Error polling webhook transcripts:', error);
+        this.webhookPollErrorCount++;
+      }
+      
+      // Don't stop polling on error, just log it and adjust interval
     }
   }
 
