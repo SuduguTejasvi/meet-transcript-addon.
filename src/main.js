@@ -1701,39 +1701,87 @@ function showStatus(message, type = 'info') {
 
 async function sendQuestionToAI() {
   try {
-    const questionInput = document.getElementById('ai-question-input');
     const answerEl = document.getElementById('ai-answer');
-    if (!questionInput || !answerEl) return;
-    const userQuestion = questionInput.value.trim();
-    if (!userQuestion) {
+    const questionInput = document.getElementById('ai-question-input');
+    if (!answerEl) return;
+    
+    // Get transcript text from buffer
+    const transcriptText = transcriptBuffer.join('\n');
+    
+    // Check if we have any transcripts
+    if (!transcriptText || transcriptText.trim().length === 0) {
       answerEl.style.display = 'block';
-      answerEl.textContent = 'Please enter a question.';
+      answerEl.textContent = 'No transcripts available yet. Please wait for some conversation to occur.';
       return;
     }
-    const transcriptText = transcriptBuffer.join('\n');
+    
     answerEl.style.display = 'block';
-    answerEl.textContent = 'Asking AI...';
+    answerEl.textContent = 'Generating question from conversation...';
+    
     if (!claudeApiKey) {
       answerEl.textContent = 'Claude API key not configured. Please set ANTHROPIC_API_KEY environment variable.';
       return;
     }
     
-    const prompt = `You are an assistant. Answer the question using ONLY the following meeting transcript. If unsure, say you are unsure.\n\nTranscript:\n${transcriptText}\n\nQuestion: ${userQuestion}`;
-    const res = await fetch('http://localhost:8787/api/askClaude', {
+    // Get proxy URL dynamically
+    let proxyUrl = 'http://localhost:8787'; // Default
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        proxyUrl = 'http://localhost:8787';
+      } else {
+        // Check localStorage for saved proxy URL
+        proxyUrl = localStorage.getItem('MEET_PROXY_URL') || proxyUrl;
+      }
+    }
+    
+    // Check credentials for proxy URL
+    if (credentials?.proxyUrl || credentials?.proxyServerUrl) {
+      proxyUrl = credentials.proxyUrl || credentials.proxyServerUrl;
+    }
+    
+    // Prompt to generate a question based on the conversation
+    const prompt = `You are an assistant analyzing a meeting conversation. Based on the following transcript of the conversation, generate a thoughtful and relevant question that would help clarify or explore the topics discussed.
+
+The question should be:
+- Relevant to the conversation that has taken place
+- Thoughtful and engaging
+- Helpful for understanding or further discussion of the topics
+- Written in natural, conversational language
+
+Transcript of the conversation:
+${transcriptText}
+
+Generate a single question based on this conversation:`;
+    
+    const res = await fetch(`${proxyUrl}/api/askClaude`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-claude-key': claudeApiKey
       },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ 
+        prompt,
+        max_tokens: 200 // Limit tokens for question generation
+      })
     });
+    
     if (!res.ok) {
       const txt = await res.text();
       answerEl.textContent = `AI request failed: ${res.status} ${txt}`;
       return;
     }
+    
     const data = await res.json();
-    answerEl.textContent = data.answer || 'No answer received.';
+    const generatedQuestion = data.answer || 'No question generated.';
+    
+    // Display the generated question
+    answerEl.textContent = `Generated Question: ${generatedQuestion}`;
+    
+    // Optionally pre-fill the question input field if it exists
+    if (questionInput) {
+      questionInput.value = generatedQuestion.trim();
+    }
   } catch (err) {
     const answerEl = document.getElementById('ai-answer');
     if (answerEl) {
