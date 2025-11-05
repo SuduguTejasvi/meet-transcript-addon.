@@ -490,10 +490,11 @@ export async function setUpAddon() {
           credentials.claudeApiKey = savedKey;
         }
         claudeApiKey = savedKey;
+        console.log('✅ Claude API key loaded from localStorage');
       }
       
-      // Save API key to localStorage when user types it
-      claudeApiKeyInput.addEventListener('blur', () => {
+      // Save API key to localStorage when user types it (multiple events to catch all cases)
+      const saveApiKey = () => {
         const key = claudeApiKeyInput.value.trim();
         if (key) {
           localStorage.setItem('CLAUDE_API_KEY', key);
@@ -502,6 +503,36 @@ export async function setUpAddon() {
           }
           claudeApiKey = key;
           console.log('✅ Claude API key saved to localStorage');
+        }
+      };
+      
+      // Save on multiple events to ensure we catch it
+      claudeApiKeyInput.addEventListener('blur', saveApiKey);
+      claudeApiKeyInput.addEventListener('input', () => {
+        // Debounce to avoid too many saves
+        clearTimeout(claudeApiKeyInput.saveTimeout);
+        claudeApiKeyInput.saveTimeout = setTimeout(saveApiKey, 500);
+      });
+      claudeApiKeyInput.addEventListener('change', saveApiKey);
+      
+      // Add explicit save button
+      const saveKeyBtn = document.getElementById('save-claude-key-btn');
+      if (saveKeyBtn) {
+        saveKeyBtn.addEventListener('click', () => {
+          saveApiKey();
+          saveKeyBtn.textContent = '✓ Saved';
+          saveKeyBtn.style.background = '#34a853';
+          setTimeout(() => {
+            saveKeyBtn.textContent = 'Save';
+            saveKeyBtn.style.background = '#1a73e8';
+          }, 2000);
+        });
+      }
+      
+      // Also save on Enter key
+      claudeApiKeyInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          saveApiKey();
         }
       });
     }
@@ -1745,30 +1776,51 @@ async function sendQuestionToAI() {
     answerEl.style.display = 'block';
     answerEl.textContent = 'Generating question from conversation...';
     
-    // Get Claude API key from various sources (localStorage, credentials, or input field)
-    let apiKeyToUse = claudeApiKey;
-    if (!apiKeyToUse && typeof window !== 'undefined') {
-      // Try localStorage
-      apiKeyToUse = localStorage.getItem('CLAUDE_API_KEY');
-      // Try input field
-      if (!apiKeyToUse) {
-        const keyInput = document.getElementById('claude-api-key-input');
-        if (keyInput && keyInput.value.trim()) {
-          apiKeyToUse = keyInput.value.trim();
-          // Save to localStorage for future use
-          localStorage.setItem('CLAUDE_API_KEY', apiKeyToUse);
+    // Get Claude API key from various sources (prioritize input field, then localStorage, then credentials)
+    let apiKeyToUse = null;
+    
+    if (typeof window !== 'undefined') {
+      // First, check the input field directly (most up-to-date)
+      const keyInput = document.getElementById('claude-api-key-input');
+      if (keyInput && keyInput.value.trim()) {
+        apiKeyToUse = keyInput.value.trim();
+        // Save to localStorage for future use
+        localStorage.setItem('CLAUDE_API_KEY', apiKeyToUse);
+        if (credentials) {
+          credentials.claudeApiKey = apiKeyToUse;
         }
+        claudeApiKey = apiKeyToUse;
+        console.log('✅ Using Claude API key from input field');
       }
-      // Try credentials
-      if (!apiKeyToUse && credentials) {
-        apiKeyToUse = credentials.claudeApiKey;
+      
+      // If not in input field, try localStorage
+      if (!apiKeyToUse) {
+        apiKeyToUse = localStorage.getItem('CLAUDE_API_KEY');
+        if (apiKeyToUse) {
+          console.log('✅ Using Claude API key from localStorage');
+        }
       }
     }
     
-    if (!apiKeyToUse) {
+    // Try credentials (fallback)
+    if (!apiKeyToUse && credentials && credentials.claudeApiKey) {
+      apiKeyToUse = credentials.claudeApiKey;
+      console.log('✅ Using Claude API key from credentials');
+    }
+    
+    // Try module-level variable (last resort)
+    if (!apiKeyToUse && claudeApiKey) {
+      apiKeyToUse = claudeApiKey;
+      console.log('✅ Using Claude API key from module variable');
+    }
+    
+    if (!apiKeyToUse || !apiKeyToUse.trim()) {
       answerEl.textContent = 'Please enter your Claude API key in the field above. Get it from https://console.anthropic.com/';
+      console.error('❌ Claude API key not found');
       return;
     }
+    
+    console.log('🔑 Using Claude API key (length:', apiKeyToUse.length, ')');
     
     // Get proxy URL dynamically
     let proxyUrl = 'http://localhost:8787'; // Default
@@ -1804,8 +1856,11 @@ Generate a single question based on this conversation:`;
     // Build headers - send API key from frontend (proxy server will use env var if available, otherwise this header)
     const headers = {
       'Content-Type': 'application/json',
-      'x-claude-key': apiKeyToUse
+      'x-claude-key': apiKeyToUse.trim()
     };
+    
+    console.log('📤 Sending request to:', `${proxyUrl}/api/askClaude`);
+    console.log('📤 Headers:', { ...headers, 'x-claude-key': headers['x-claude-key'] ? '***' + headers['x-claude-key'].slice(-4) : 'MISSING' });
     
     const res = await fetch(`${proxyUrl}/api/askClaude`, {
       method: 'POST',

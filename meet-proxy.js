@@ -584,10 +584,24 @@ app.get('/api/attendee/bots/:botId', async (req, res) => {
 // Proxy to Anthropic Claude to avoid browser CORS
 app.post('/api/askClaude', async (req, res) => {
   try {
+    // Log headers for debugging (be careful not to log sensitive data)
+    const headerKey = req.get('x-claude-key');
+    console.log('[Claude Proxy] Request received');
+    console.log('[Claude Proxy] Has x-claude-key header:', !!headerKey);
+    console.log('[Claude Proxy] Header key length:', headerKey ? headerKey.length : 0);
+    console.log('[Claude Proxy] Has env ANTHROPIC_API_KEY:', !!process.env.ANTHROPIC_API_KEY);
+    
     // Use environment variable first, fallback to request header if provided
-    const claudeKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || req.get('x-claude-key');
+    const claudeKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || headerKey;
     const { prompt, model, max_tokens } = req.body || {};
-    if (!claudeKey) return res.status(401).json({ error: 'missing_api_key', message: 'ANTHROPIC_API_KEY must be set in proxy server environment or provided in x-claude-key header' });
+    
+    if (!claudeKey) {
+      console.error('[Claude Proxy] No API key found');
+      return res.status(401).json({ error: 'missing_api_key', message: 'ANTHROPIC_API_KEY must be set in proxy server environment or provided in x-claude-key header' });
+    }
+    
+    console.log('[Claude Proxy] Using API key (length:', claudeKey.length, ', source:', process.env.ANTHROPIC_API_KEY ? 'env' : 'header', ')');
+    
     if (!prompt) return res.status(400).json({ error: 'missing_prompt' });
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
