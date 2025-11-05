@@ -373,7 +373,17 @@
                 </div>
                 <input id="ai-question-input" type="text" placeholder="Question will be auto-generated from conversation..." 
                        style="width:100%; padding:8px; border:1px solid #dadce0; border-radius:6px; font-size:14px; margin-bottom:8px;">
-                <button id="ai-send-btn" class="btn" style="width:100%; background:#1a73e8; color:white;">Get Question</button>
+                <button id="ai-send-btn" class="btn" style="width:100%; background:#1a73e8; color:white; margin-bottom:8px;">Get Question</button>
+                <div style="display:flex; gap:4px; margin-bottom:8px;">
+                    <input id="ask-question-input" type="text" placeholder="Ask a question..." 
+                           style="flex:1; padding:8px; border:1px solid #dadce0; border-radius:6px; font-size:14px;">
+                    <button id="ask-question-send-btn" style="padding:8px 16px; background:#1a73e8; color:white; border:none; border-radius:6px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
+                        </svg>
+                        Send
+                    </button>
+                </div>
                 <div id="ai-answer" style="margin-top:8px; font-size:13px; color:#202124; background:#f8f9fa; border:1px solid #e0e0e0; border-radius:6px; padding:8px; display:none;"></div>
             </div>
         </div>

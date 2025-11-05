@@ -23,6 +23,8 @@ let transcriptionManager = null;
 let attendeeIntegration = null;
 let googleMeetTranscriptAPI = null;
 let meetMediaAPI = null;
+let seenSpeakerNames = new Set(); // Track unique speaker names
+let candidateSpeakerName = null; // The candidate (opposite person) name
 
 /**
  * Initialize secure credentials
@@ -333,6 +335,41 @@ function handleAttendeeTranscriptUpdate(entry) {
   
   if (!transcription || !transcription.trim()) return;
   
+  // Track speaker names to identify the candidate
+  const speaker = speakerName || 'Speaker';
+  if (speaker && !isPlaceholder) {
+    if (!seenSpeakerNames.has(speaker)) {
+      seenSpeakerNames.add(speaker);
+      // The second unique speaker is likely the candidate (opposite person)
+      if (seenSpeakerNames.size === 2 && !candidateSpeakerName) {
+        // Get all speaker names and find the one that's not the first
+        const speakerNamesArray = Array.from(seenSpeakerNames);
+        candidateSpeakerName = speakerNamesArray[1] || speakerNamesArray[0];
+        console.log('✅ Candidate identified:', candidateSpeakerName);
+      } else if (seenSpeakerNames.size === 1 && !candidateSpeakerName) {
+        // If only one speaker so far, we'll wait for the second one
+        // But for now, if we have participants, check if this is the local user
+        if (participants.size > 0) {
+          const participantArray = Array.from(participants.values());
+          const localParticipant = participantArray.find(p => p.isLocal);
+          if (localParticipant && speaker !== localParticipant.name) {
+            candidateSpeakerName = speaker;
+            console.log('✅ Candidate identified (non-local):', candidateSpeakerName);
+          }
+        }
+      }
+    }
+    // Update candidate if we have participants and this speaker is not local
+    if (participants.size > 0 && !candidateSpeakerName) {
+      const participantArray = Array.from(participants.values());
+      const localParticipant = participantArray.find(p => p.isLocal);
+      if (localParticipant && speaker !== localParticipant.name) {
+        candidateSpeakerName = speaker;
+        console.log('✅ Candidate identified (non-local):', candidateSpeakerName);
+      }
+    }
+  }
+  
   // Display in transcript container
   const container = document.getElementById('transcript-container');
   if (container) {
@@ -363,7 +400,6 @@ function handleAttendeeTranscriptUpdate(entry) {
       line.setAttribute('data-placeholder', 'true');
     }
     
-    const speaker = speakerName || 'Speaker';
     let timeStr = '';
     if (timestamp && !isPlaceholder) {
       // timestamp can be in milliseconds or seconds
@@ -388,6 +424,63 @@ function handleAttendeeTranscriptUpdate(entry) {
   if (!isPlaceholder) {
     transcriptBuffer.push(`${speakerName || 'Speaker'}: ${transcription}`);
   }
+}
+
+/**
+ * Send question message to transcript container
+ */
+function sendQuestionMessage() {
+  const input = document.getElementById('ask-question-input');
+  if (!input) return;
+  
+  const message = input.value.trim();
+  if (!message) {
+    return; // Don't send empty messages
+  }
+  
+  // Determine the candidate speaker name
+  let speakerName = candidateSpeakerName;
+  
+  // If we don't have a candidate yet, try to find it from participants
+  if (!speakerName && participants.size > 0) {
+    const participantArray = Array.from(participants.values());
+    const localParticipant = participantArray.find(p => p.isLocal);
+    const candidateParticipant = participantArray.find(p => !p.isLocal);
+    if (candidateParticipant) {
+      speakerName = candidateParticipant.name;
+      candidateSpeakerName = speakerName;
+      console.log('✅ Candidate identified from participants:', candidateSpeakerName);
+    }
+  }
+  
+  // Fallback: use second speaker name if we have seen multiple speakers
+  if (!speakerName && seenSpeakerNames.size >= 2) {
+    const speakerNamesArray = Array.from(seenSpeakerNames);
+    speakerName = speakerNamesArray[1] || speakerNamesArray[0];
+  }
+  
+  // Final fallback: use "Candidate" as default
+  if (!speakerName) {
+    speakerName = 'Candidate';
+    console.log('⚠️ Using default candidate name');
+  }
+  
+  // Create a transcript entry and append it to the container
+  const entry = {
+    speakerName: speakerName,
+    transcription: message,
+    timestamp: Date.now(),
+    duration: 0,
+    isPlaceholder: false
+  };
+  
+  // Use the same function to display the message
+  handleAttendeeTranscriptUpdate(entry);
+  
+  // Clear the input
+  input.value = '';
+  
+  console.log('✅ Question message sent:', message);
 }
 
 /**
@@ -477,6 +570,20 @@ export async function setUpAddon() {
     const aiSendBtn = document.getElementById('ai-send-btn');
     if (aiSendBtn) {
       aiSendBtn.addEventListener('click', sendQuestionToAI);
+    }
+    
+    // Wire ask question send button
+    const askQuestionSendBtn = document.getElementById('ask-question-send-btn');
+    const askQuestionInput = document.getElementById('ask-question-input');
+    if (askQuestionSendBtn) {
+      askQuestionSendBtn.addEventListener('click', sendQuestionMessage);
+    }
+    if (askQuestionInput) {
+      askQuestionInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          sendQuestionMessage();
+        }
+      });
     }
     
     // Load Claude API key from localStorage if available
