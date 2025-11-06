@@ -678,7 +678,32 @@ export class AttendeeIntegration {
         throw new Error(`Failed to get transcript: ${response.status} ${response.statusText}. ${errorData.message || errorData.detail || ''}`);
       }
 
-      const transcriptData = await response.json();
+      // Check if response is HTML (ngrok warning page) - clone response to peek without consuming
+      let transcriptData;
+      try {
+        // Clone response to check content without consuming the original
+        const clonedResponse = response.clone();
+        const text = await clonedResponse.text();
+        
+        // Check if it's HTML (ngrok warning page)
+        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html') || text.includes('ngrok') || text.includes('You are about to visit')) {
+          console.error('[Attendee] Received HTML instead of JSON when getting transcript:', text.substring(0, 300));
+          console.warn('[Attendee] Returning empty array - ngrok warning page detected');
+          return []; // Return empty array instead of throwing error to allow retry
+        }
+        
+        // Parse as JSON
+        transcriptData = await response.json();
+      } catch (error) {
+        // If JSON parse failed, it might be HTML
+        if (error.message && error.message.includes('JSON')) {
+          console.error('[Attendee] Error parsing transcript response as JSON:', error.message);
+          console.warn('[Attendee] Returning empty array - likely ngrok warning page');
+          return []; // Return empty array to allow retry
+        }
+        // Re-throw other errors
+        throw error;
+      }
       
       // Log detailed response structure for debugging (when data is found or first few calls)
       const shouldLog = (this.pollCount && this.pollCount <= 5) || (Array.isArray(transcriptData) && transcriptData.length > 0);
@@ -1329,15 +1354,34 @@ export class AttendeeIntegration {
         throw new Error(`Failed to get bot info: ${response.status} ${response.statusText}`);
       }
 
-      // Check if response is HTML (ngrok warning page)
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('text/html')) {
-        const text = await response.text();
-        console.error('[Attendee] Received HTML instead of JSON (likely ngrok warning page):', text.substring(0, 200));
-        throw new Error('Received HTML response instead of JSON. This usually means ngrok is showing a warning page. Try visiting the ngrok URL in your browser first to clear the warning.');
+      // Check if response is HTML (ngrok warning page) - clone response to peek without consuming
+      let botInfo;
+      try {
+        // Clone response to check content without consuming the original
+        const clonedResponse = response.clone();
+        const text = await clonedResponse.text();
+        
+        // Check if it's HTML (ngrok warning page)
+        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html') || text.includes('ngrok') || text.includes('You are about to visit')) {
+          console.error('[Attendee] Received HTML instead of JSON (likely ngrok warning page):', text.substring(0, 300));
+          throw new Error('Received HTML response instead of JSON. ngrok is showing a warning page. The ngrok-skip-browser-warning header should bypass this. Try visiting the ngrok URL in your browser first to clear the warning.');
+        }
+        
+        // Parse as JSON
+        botInfo = await response.json();
+      } catch (error) {
+        // If it's already our custom error, re-throw it
+        if (error.message && error.message.includes('Received HTML response')) {
+          throw error;
+        }
+        // If JSON parse failed, it might be HTML
+        if (error.message && error.message.includes('JSON')) {
+          console.error('[Attendee] Error parsing response as JSON:', error.message);
+          throw new Error(`Failed to parse bot info response as JSON. This might be due to ngrok showing a warning page. Error: ${error.message}`);
+        }
+        // Re-throw other errors
+        throw error;
       }
-
-      const botInfo = await response.json();
       
       // Only log events if there are transcript events (reduce spam)
       if (botInfo.events && Array.isArray(botInfo.events) && botInfo.events.length > 0) {

@@ -69,7 +69,7 @@ export class SecureCredentialManager {
         this.credentials = {
           cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER || '409997382473',
           deepgramApiKey: process.env.DEEPGRAM_API_KEY || '',
-          attendeeApiKey: process.env.ATTENDEE_API_KEY || 'VreIvysSRcsG2KDWPsDOxM55j7Mwi2uZ',
+          attendeeApiKey: process.env.ATTENDEE_API_KEY || '9eQGaboIot3nPSRBw6kAh8R1dBkpmdem',
           claudeApiKey: process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '',
           oauthClientId: process.env.OAUTH_CLIENT_ID || '409997382473-c9kq9iijvgibd139ngrg8acitiip22vl.apps.googleusercontent.com',
           // For production (GitHub Pages), you MUST set MEET_PROXY_URL to a public URL
@@ -98,7 +98,7 @@ export class SecureCredentialManager {
         clientId: process.env.CLIENT_ID,
         cloudProjectNumber: process.env.CLOUD_PROJECT_NUMBER,
         deepgramApiKey: process.env.DEEPGRAM_API_KEY,
-        attendeeApiKey: process.env.ATTENDEE_API_KEY || 'VreIvysSRcsG2KDWPsDOxM55j7Mwi2uZ',
+        attendeeApiKey: process.env.ATTENDEE_API_KEY || '9eQGaboIot3nPSRBw6kAh8R1dBkpmdem',
         claudeApiKey: process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '',
         mainStageUrl: process.env.MAIN_STAGE_URL,
         sidePanelUrl: process.env.SIDE_PANEL_URL,
