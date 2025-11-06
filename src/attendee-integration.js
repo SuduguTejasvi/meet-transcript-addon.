@@ -532,6 +532,28 @@ export class AttendeeIntegration {
         isBrowser: typeof window !== 'undefined'
       });
       
+      // WORKAROUND: ngrok free tier intercepts OPTIONS preflight requests
+      // Make a simple GET request first (no custom headers = no preflight) to clear ngrok warning
+      if (this.useProxy && this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+        try {
+          console.log('[Attendee] 🔥 Warming up ngrok connection to bypass warning page...');
+          // Simple GET without custom headers - won't trigger CORS preflight
+          await fetch(`${this.proxyServerUrl}/health`, {
+            method: 'GET',
+            mode: 'cors',
+            credentials: 'omit' // Don't send credentials to avoid preflight
+          }).catch(err => {
+            // Ignore warm-up errors, just log them
+            console.log('[Attendee] Warm-up request completed (errors are OK):', err.message);
+          });
+          // Small delay to ensure ngrok processes the warm-up
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (err) {
+          // Continue even if warm-up fails
+          console.log('[Attendee] Warm-up request failed (continuing anyway):', err.message);
+        }
+      }
+      
       const headers = {
         'Content-Type': 'application/json'
       };

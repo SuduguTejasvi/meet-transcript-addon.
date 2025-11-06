@@ -145,8 +145,75 @@ app.use((req, res, next) => {
   next();
 });
 
+// Additional CORS header middleware to ensure headers are always set (even if ngrok interferes)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Check if origin is allowed
+  const isAllowed = !origin || ALLOWED_ORIGINS.some(allowed => {
+    if (typeof allowed === 'string') {
+      return origin === allowed;
+    } else if (allowed instanceof RegExp) {
+      return allowed.test(origin);
+    }
+    return false;
+  });
+  
+  // Set CORS headers on all responses if origin is allowed
+  if (isAllowed && origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Access-Token, x-access-token, X-Project-Number, x-project-number, x-claude-key, X-CLAUDE-KEY, x-attendee-api-key, X-ATTENDEE-API-KEY, Authorization, X-Webhook-Signature, ngrok-skip-browser-warning');
+  }
+  
+  next();
+});
+
+// Handle OPTIONS preflight requests for all routes (before express.json middleware)
+app.use((req, res, next) => {
+  // Handle OPTIONS requests explicitly
+  if (req.method === 'OPTIONS') {
+    const origin = req.headers.origin;
+    
+    // Log OPTIONS requests for debugging
+    console.log('[Proxy] OPTIONS preflight request:', {
+      origin: origin,
+      path: req.path,
+      headers: {
+        'access-control-request-method': req.headers['access-control-request-method'],
+        'access-control-request-headers': req.headers['access-control-request-headers']
+      }
+    });
+    
+    // Check if origin is allowed
+    const isAllowed = !origin || ALLOWED_ORIGINS.some(allowed => {
+      if (typeof allowed === 'string') {
+        return origin === allowed;
+      } else if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed && origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Access-Token, x-access-token, X-Project-Number, x-project-number, x-claude-key, X-CLAUDE-KEY, x-attendee-api-key, X-ATTENDEE-API-KEY, Authorization, X-Webhook-Signature, ngrok-skip-browser-warning');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+      console.log('[Proxy] ✅ OPTIONS request allowed for origin:', origin);
+      return res.status(200).end();
+    } else {
+      console.warn('[Proxy] ❌ OPTIONS request blocked for origin:', origin);
+      return res.status(403).end();
+    }
+  }
+  
+  next();
+});
+
 // Ensure OPTIONS preflight responses include CORS headers
-// NOTE: cors() middleware above responds to preflight automatically; no explicit app.options route
 app.use(express.json());
 
 // Root route - helpful message
@@ -425,6 +492,27 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 // Proxy endpoints for Attendee.ai API to avoid browser CORS
 // POST /api/attendee/bots - Create a bot
 app.post('/api/attendee/bots', async (req, res) => {
+  // Set CORS headers explicitly to ensure they're present even through ngrok
+  const origin = req.headers.origin;
+  console.log('[Proxy] POST /api/attendee/bots request from origin:', origin);
+  
+  const isAllowed = !origin || ALLOWED_ORIGINS.some(allowed => {
+    if (typeof allowed === 'string') {
+      return origin === allowed;
+    } else if (allowed instanceof RegExp) {
+      return allowed.test(origin);
+    }
+    return false;
+  });
+  
+  if (isAllowed && origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    console.log('[Proxy] ✅ CORS headers set for origin:', origin);
+  } else {
+    console.warn('[Proxy] ❌ Origin not allowed:', origin);
+  }
+  
   try {
     const apiKey = req.get('x-attendee-api-key') || req.get('authorization')?.replace('Token ', '');
     if (!apiKey) {
