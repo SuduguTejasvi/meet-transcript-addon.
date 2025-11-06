@@ -534,7 +534,7 @@ export class AttendeeIntegration {
       
       // WORKAROUND: ngrok free tier intercepts OPTIONS preflight requests
       // Make a simple GET request first (no custom headers = no preflight) to clear ngrok warning
-      if (this.useProxy && this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+      if (this.useProxy && this.proxyServerUrl && (this.proxyServerUrl.includes('ngrok-free.app') || this.proxyServerUrl.includes('ngrok-free.dev'))) {
         try {
           console.log('[Attendee] 🔥 Warming up ngrok connection to bypass warning page...');
           // Simple GET without custom headers - won't trigger CORS preflight
@@ -561,8 +561,8 @@ export class AttendeeIntegration {
       // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
       if (this.useProxy) {
         headers['x-attendee-api-key'] = this.apiKey;
-        // Add ngrok bypass header if using ngrok-free.app
-        if (this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+        // Add ngrok bypass header if using ngrok-free.app or ngrok-free.dev
+        if (this.proxyServerUrl && (this.proxyServerUrl.includes('ngrok-free.app') || this.proxyServerUrl.includes('ngrok-free.dev'))) {
           headers['ngrok-skip-browser-warning'] = 'true';
         }
         console.log('[Attendee] Using proxy server:', url);
@@ -655,8 +655,8 @@ export class AttendeeIntegration {
       // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
       if (this.useProxy) {
         headers['x-attendee-api-key'] = this.apiKey;
-        // Add ngrok bypass header if using ngrok-free.app
-        if (this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+        // Add ngrok bypass header if using ngrok-free.app or ngrok-free.dev
+        if (this.proxyServerUrl && (this.proxyServerUrl.includes('ngrok-free.app') || this.proxyServerUrl.includes('ngrok-free.dev'))) {
           headers['ngrok-skip-browser-warning'] = 'true';
         }
       } else {
@@ -885,8 +885,8 @@ export class AttendeeIntegration {
       const headers = {
         'Content-Type': 'application/json'
       };
-      // Add ngrok bypass header if using ngrok-free.app
-      if (this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+      // Add ngrok bypass header if using ngrok-free.app or ngrok-free.dev
+      if (this.proxyServerUrl && (this.proxyServerUrl.includes('ngrok-free.app') || this.proxyServerUrl.includes('ngrok-free.dev'))) {
         headers['ngrok-skip-browser-warning'] = 'true';
       }
       
@@ -1312,8 +1312,8 @@ export class AttendeeIntegration {
       // Add API key to headers (proxy expects it in x-attendee-api-key or Authorization)
       if (this.useProxy) {
         headers['x-attendee-api-key'] = this.apiKey;
-        // Add ngrok bypass header if using ngrok-free.app
-        if (this.proxyServerUrl && this.proxyServerUrl.includes('ngrok-free.app')) {
+        // Add ngrok bypass header if using ngrok-free.app or ngrok-free.dev
+        if (this.proxyServerUrl && (this.proxyServerUrl.includes('ngrok-free.app') || this.proxyServerUrl.includes('ngrok-free.dev'))) {
           headers['ngrok-skip-browser-warning'] = 'true';
         }
       } else {
@@ -1327,6 +1327,14 @@ export class AttendeeIntegration {
 
       if (!response.ok) {
         throw new Error(`Failed to get bot info: ${response.status} ${response.statusText}`);
+      }
+
+      // Check if response is HTML (ngrok warning page)
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        const text = await response.text();
+        console.error('[Attendee] Received HTML instead of JSON (likely ngrok warning page):', text.substring(0, 200));
+        throw new Error('Received HTML response instead of JSON. This usually means ngrok is showing a warning page. Try visiting the ngrok URL in your browser first to clear the warning.');
       }
 
       const botInfo = await response.json();

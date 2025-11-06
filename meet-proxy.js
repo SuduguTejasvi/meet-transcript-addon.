@@ -27,6 +27,7 @@ if (process.env.NGROK_URL) {
 // Also allow any ngrok-free.app subdomain (common ngrok pattern)
 // This allows dynamic ngrok URLs without needing to set env var
 ALLOWED_ORIGINS.push(/^https:\/\/.*\.ngrok-free\.app$/);
+ALLOWED_ORIGINS.push(/^https:\/\/.*\.ngrok-free\.dev$/);  // Support .dev domains too
 ALLOWED_ORIGINS.push(/^https:\/\/.*\.ngrok\.io$/);
 ALLOWED_ORIGINS.push(/^https:\/\/.*\.ngrok\.app$/);
 
